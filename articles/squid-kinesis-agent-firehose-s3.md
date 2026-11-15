@@ -212,55 +212,25 @@ foreach ($instanceId in $instanceIds) {
 
 UserDataは`/etc/aws-kinesis/agent.json`とsystemd unitを作り、自動起動を有効にします。Kinesis AgentにはSquidログを読むグループ権限を付け、新しく作られるログも`0640 squid:squid`で読めるようにしました。
 
-実際にEC2から取得したunitファイルです。実行ユーザー、squidグループへの追加、Corretto 17の指定を確認できます。
+EC2上でunitファイルを確認するコマンドです。実行ユーザー、squidグループへの追加、Corretto 17の指定を確認します。
 
-```ini:/etc/systemd/system/aws-kinesis-agent.service
-[Unit]
-Description=Amazon Kinesis Agent for Squid logs
-Wants=network-online.target
-After=network-online.target squid.service
-[Service]
-Type=simple
-User=aws-kinesis-agent-user
-SupplementaryGroups=squid
-StateDirectory=aws-kinesis-agent
-WorkingDirectory=/var/lib/aws-kinesis-agent
-Environment="JAVACMD=/usr/lib/jvm/java-17-amazon-corretto.x86_64/bin/java"
-Environment="JVM_ARGS=-Dlog4j.configurationFile=file:///etc/aws-kinesis/log4j.xml"
-ExecStart=/usr/bin/start-aws-kinesis-agent -c /etc/aws-kinesis/agent.json
-Restart=on-failure
-RestartSec=5
-TimeoutStopSec=90
-UMask=0027
-[Install]
-WantedBy=multi-user.target
+```bash
+sudo cat /etc/systemd/system/aws-kinesis-agent.service
 ```
+
+![SSM実行履歴からunitファイルを取得した実ターミナル画面](/images/squid-agent/agent-unit-terminal.png)
+*AWS CLIで構築直後のSSM実行履歴を取得し、unitファイルの該当部分を表示した実画面です。ユーザー・グループ・Javaの指定と、サービス管理の設定を確認できます。*
 
 チェックポイントは再起動後も残る`/var/lib/aws-kinesis-agent/checkpoints`に置きます。収集位置の記録を消して最初から送り直す方法は使いません。
 
-構築直後の`ls -l`の出力は次のとおりです。この時点ではテストアクセス前のため、`access.log`は0 Bです。
+ログとチェックポイントの所有者・権限を確認します。構築直後はテストアクセス前のため、`access.log`は0 Bでした。
 
-```text:AZ1のログとチェックポイント
-/var/lib/aws-kinesis-agent:
-total 12
--rw-r-----. 1 aws-kinesis-agent-user aws-kinesis-agent-user 12288 Nov 15 09:13 checkpoints
-
-/var/log/squid:
-total 8
--rw-r-----. 1 squid squid    0 Nov 15 09:13 access.log
--rw-r-----. 1 squid squid 6265 Nov 15 09:20 cache.log
+```bash
+sudo ls -l /var/log/squid /var/lib/aws-kinesis-agent
 ```
 
-```text:AZ2のログとチェックポイント
-/var/lib/aws-kinesis-agent:
-total 12
--rw-r-----. 1 aws-kinesis-agent-user aws-kinesis-agent-user 12288 Nov 15 09:15 checkpoints
-
-/var/log/squid:
-total 8
--rw-r-----. 1 squid squid    0 Nov 15 09:14 access.log
--rw-r-----. 1 squid squid 6494 Nov 15 09:20 cache.log
-```
+![両EC2のログ権限とチェックポイントを取得した実ターミナル画面](/images/squid-agent/agent-permissions-terminal.png)
+*構築直後のSSM実行履歴から、両EC2の出力末尾10行を取得した実画面です。squidログの権限と、Agentユーザーが所有するチェックポイントを確認できます。*
 
 ### Kinesis AgentとFirehoseの設定
 
@@ -299,42 +269,14 @@ Firehose側はS3向けのバッファを60秒・5MiBとし、圧縮、データ�
 
 NLBの両ターゲットが`healthy`、B側Endpointが`available`であることを確認してから、LambdaでHTTPS通信を発生させます。今回のテスト用LambdaはEndpointのAZ別DNS名を選択できるため、各AZのSquidを個別に通して確認しました。
 
-疎通前に取得したAPI応答の抜粋です。EC2 IDとENI IDはマスクしています。
+疎通前には、対象ターゲットグループとB側Endpointの状態を確認します。ARNとEndpoint IDは自分の環境の値に置き換えます。
 
-```json:NLBのターゲット状態
-{
-  "TargetHealthDescriptions": [
-    {
-      "Target": {
-        "Id": "[EC2_AZ2]",
-        "Port": 3128
-      },
-      "TargetHealth": {
-        "State": "healthy"
-      }
-    },
-    {
-      "Target": {
-        "Id": "[EC2_AZ1]",
-        "Port": 3128
-      },
-      "TargetHealth": {
-        "State": "healthy"
-      }
-    }
-  ]
-}
-```
+```powershell
+# A側のNLBターゲット状態を確認する
+aws elbv2 describe-target-health --profile provider --region ap-southeast-2 --target-group-arn 'YOUR_TARGET_GROUP_ARN' --query 'TargetHealthDescriptions[].{Instance:Target.Id,Port:Target.Port,State:TargetHealth.State}' --output table
 
-```json:B側のプロキシ接続用Endpoint
-{
-  "VpcEndpointType": "Interface",
-  "State": "available",
-  "NetworkInterfaceIds": [
-    "[ENI_1]",
-    "[ENI_2]"
-  ]
-}
+# B側のプロキシ接続用Endpointの状態を確認する
+aws ec2 describe-vpc-endpoints --profile consumer --region ap-southeast-2 --vpc-endpoint-ids 'YOUR_CONSUMER_ENDPOINT_ID' --query 'VpcEndpoints[].{State:State,Type:VpcEndpointType}' --output table
 ```
 
 ```powershell
@@ -347,55 +289,10 @@ python logging/labctl.py generate --route az2 --count 3 --run smoke-az2
 
 この管理スクリプトはLambdaの実行と証跡の保存を行います。Firehoseにログを送るのは、EC2上のKinesis Agentです。
 
-初回疎通で保存したLambda応答です。各AZで3回ずつすべてHTTP 200となり、送信元パブリックIPもそれぞれのSquid EC2と一致しました。IPはEC2ごとに区別してマスクしています。
+初回疎通では、各AZで3回ずつすべてHTTP 200となり、送信元パブリックIPもそれぞれのSquid EC2と一致しました。
 
-```json:AZ1を指定したLambdaの実応答（抜粋）
-{
-  "run": "fresh-20261115-az1",
-  "route": "az1",
-  "requests": [
-    {
-      "request_id": "fresh-20261115-az1-000",
-      "status": 200,
-      "egress_ip": "[EC2_AZ1_PUBLIC_IP]"
-    },
-    {
-      "request_id": "fresh-20261115-az1-001",
-      "status": 200,
-      "egress_ip": "[EC2_AZ1_PUBLIC_IP]"
-    },
-    {
-      "request_id": "fresh-20261115-az1-002",
-      "status": 200,
-      "egress_ip": "[EC2_AZ1_PUBLIC_IP]"
-    }
-  ]
-}
-```
-
-```json:AZ2を指定したLambdaの実応答（抜粋）
-{
-  "run": "fresh-20261115-az2",
-  "route": "az2",
-  "requests": [
-    {
-      "request_id": "fresh-20261115-az2-000",
-      "status": 200,
-      "egress_ip": "[EC2_AZ2_PUBLIC_IP]"
-    },
-    {
-      "request_id": "fresh-20261115-az2-001",
-      "status": 200,
-      "egress_ip": "[EC2_AZ2_PUBLIC_IP]"
-    },
-    {
-      "request_id": "fresh-20261115-az2-002",
-      "status": 200,
-      "egress_ip": "[EC2_AZ2_PUBLIC_IP]"
-    }
-  ]
-}
-```
+![検証時のNLB状態と両AZのLambda成功応答を読み出した実ターミナル画面](/images/squid-agent/both-az-results-terminal.png)
+*検証時に保存したreadiness.jsonと両AZのLambda応答ファイルを、実際のPowerShellで読み出した画面です。NLBの2台をAZ1・AZ2として表示し、各AZで3アクセスずつHTTP 200となった記録を確認できます。撮影時点のNLB状態を取得した画面ではなく、疎通直前・初回疎通の保存記録です。*
 
 最初の少量疎通では、各AZで3アクセスずつ、計6アクセスがすべてHTTP 200で成功しました。EC2原本とS3原本はともに6行・1,137 Bで一致し、欠損・余分な行は0でした。集約比較は、この疎通確認と計測区間を分けて行います。
 
@@ -411,25 +308,23 @@ python logging/labctl.py generate --route az2 --count 3 --run smoke-az2
 
 たとえば`fresh-20261115-az1-000`は、初回疎通テストでAZ1側を通した最初のアクセスに付けたIDです。この値がLambdaの成功応答とS3ログの両方に残っていれば、**そのアクセスのログがS3まで届いた**と照合できます。
 
-同じアクセスについて、Lambda応答とS3ログの識別部分を抜き出すと次のようになります。
+前のLambda応答画面と、次のS3ログ画面で、同じリクエストIDを照合します。
 
-```json:Lambdaの成功応答（抜粋）
-{
-  "request_id": "fresh-20261115-az1-000",
-  "status": 200
-}
+S3のオブジェクト一覧と、初回疎通のログを取得します。バケット名・オブジェクトのキー・検索するリクエストIDは、自分の環境に合わせます。
+
+```powershell
+$bucket = 'YOUR_BUCKET_NAME'
+$s3Uri = 's3://YOUR_BUCKET_NAME/YOUR_OBJECT_KEY'
+
+# 保存先のオブジェクト一覧から先頭3個を確認する
+aws s3api list-objects-v2 --profile provider --region ap-southeast-2 --bucket $bucket --prefix squid/ --query 'Contents[:3].{Key:Key,Size:Size}' --output table
+
+# 対象オブジェクトを読み、初回疎通の各AZの最初のアクセスを取り出す
+aws s3 cp $s3Uri - --profile provider --region ap-southeast-2 | Select-String -Pattern 'request=fresh-20261115-az[12]-000$'
 ```
 
-```text:対応するS3ログの識別部分
-source=az1 instance=[EC2_AZ1] request=fresh-20261115-az1-000
-```
-
-S3ログ原本から、AZ1・AZ2の最初のアクセスを1行ずつ示します。IPとEC2 IDはマスクしています。`source`でEC2を、`request`で個々のアクセスを区別できます。
-
-```text:S3に保存されたSquidログ（抜粋）
-1794734415.962    283 [IP] TCP_TUNNEL/200 4960 CONNECT checkip.amazonaws.com:443 - HIER_DIRECT/[IP] - source=az1 instance=[EC2_AZ1] request=fresh-20261115-az1-000
-1794734418.844    284 [IP] TCP_TUNNEL/200 4956 CONNECT checkip.amazonaws.com:443 - HIER_DIRECT/[IP] - source=az2 instance=[EC2_AZ2] request=fresh-20261115-az2-000
-```
+![S3のオブジェクト一覧と実ログをAWS CLIで取得した実ターミナル画面](/images/squid-agent/s3-logs-terminal.png)
+*AWS CLIでS3から実際に取得した画面です。上部が先頭3オブジェクトのキーとサイズ、下部が初回疎通の各AZの最初のログです。IPとEC2 IDは表示時にマスクしています。sourceでEC2を、requestでLambda応答との一致を確認できます。*
 
 HTTPSでは、SquidはCONNECT要求で接続先のホストとポートを受け取りますが、その後のTLS通信内のURLパスは読めません。今回はLambdaがCONNECT時の`X-Lab-Request`ヘッダーへ検証用IDを入れ、Squidの`%{X-Lab-Request}>h`でその値をログに残しています。これは検証の照合用に追加した仕組みです。
 
@@ -448,27 +343,20 @@ getent ahostsv4 firehose.ap-southeast-2.amazonaws.com
 
 さらに、配布したEC2ロールの送信ポリシーをIAMポリシーシミュレーターで評価し、`aws:SourceVpce`に今回のEndpointを指定すると許可、条件がない場合は`implicitDeny`となることを確認しました。実際の収集では、Kinesis Agentの送信成功記録とS3に保存されたログも合わせて確認します。
 
-SSM応答に保存された名前解決結果は次のとおりです。どちらも、Firehose用Endpoint ENIのプライベートIP `10.240.1.218`・`10.240.2.201`と一致しています。
+検証時に保存された名前解決結果は、どちらもFirehose用Endpoint ENIのプライベートIP `10.240.1.218`・`10.240.2.201`と一致しています。
 
-```json:AZ1で取得した名前解決結果
-{
-  "hostname": "firehose.ap-southeast-2.amazonaws.com",
-  "resolved_ipv4": [
-    "10.240.1.218",
-    "10.240.2.201"
-  ]
-}
+Endpointの設定とENIのIPは、次のAWS CLIで確認できます。IDは自分の環境の値に置き換えます。
+
+```powershell
+# Firehose用Endpointの状態とPrivate DNS設定を取得する
+aws ec2 describe-vpc-endpoints --profile provider --region ap-southeast-2 --vpc-endpoint-ids 'YOUR_FIREHOSE_ENDPOINT_ID' --query 'VpcEndpoints[].{State:State,PrivateDnsEnabled:PrivateDnsEnabled}' --output table
+
+# Endpointに接続された2つのENIのAZとプライベートIPを取得する
+aws ec2 describe-network-interfaces --profile provider --region ap-southeast-2 --network-interface-ids 'YOUR_ENDPOINT_ENI_1_ID' 'YOUR_ENDPOINT_ENI_2_ID' --query 'NetworkInterfaces[].{AZ:AvailabilityZone,IP:PrivateIpAddress}' --output table
 ```
 
-```json:AZ2で取得した名前解決結果
-{
-  "hostname": "firehose.ap-southeast-2.amazonaws.com",
-  "resolved_ipv4": [
-    "10.240.1.218",
-    "10.240.2.201"
-  ]
-}
-```
+![Endpointの状態とENIのIPおよび両EC2の名前解決履歴を取得した実ターミナル画面](/images/squid-agent/private-dns-terminal.png)
+*上部は撮影時にAWS CLIで取得したEndpointのavailable・Private DNS有効とENIのIP、下部はSSMに残る検証時の両EC2の名前解決結果です。現在のEndpoint情報と、検証時のEC2実行履歴を区別して確認しています。*
 
 | 送信ポリシー単体の評価条件 | 結果 |
 |---|---|
@@ -479,24 +367,7 @@ SSM応答に保存された名前解決結果は次のとおりです。どち�
 
 S3には、Firehoseの配信バッファに応じて作られたオブジェクトが保存されます。**S3ファイルが1個になったことだけでは、Kinesis Agentが1レコードに集約したとは判断できません。** 複数のFirehose入力レコードも、同じS3ファイルに入ります。
 
-S3から取得したログオブジェクトは10個です。先頭3個のキーとサイズを示します。これはS3オブジェクトの一覧であり、Firehoseの入力レコード一覧ではありません。
-
-```json:取得したS3オブジェクト一覧（先頭3個の抜粋）
-[
-  {
-    "Key": "squid/2026/11/15/09/squidvpce-store-squid-1-2026-11-15-09-21-18-7583ddea-a329-4d3d-921b-933d079329e8",
-    "Size": 1137
-  },
-  {
-    "Key": "squid/2026/11/15/09/squidvpce-store-squid-1-2026-11-15-09-25-18-155332e9-454b-49b3-bd7b-280dca1cd001",
-    "Size": 22240
-  },
-  {
-    "Key": "squid/2026/11/15/09/squidvpce-store-squid-1-2026-11-15-09-30-17-870b7fc0-e78c-4554-a4e9-82e48cc16cff",
-    "Size": 22240
-  }
-]
-```
+S3から取得したログオブジェクトは10個です。前のS3取得画面では、先頭3個のキーとサイズを確認できます。これはS3オブジェクトの一覧であり、Firehoseの入力レコード一覧ではありません。
 
 ### 原本同士を照合する
 
@@ -518,7 +389,6 @@ python logging/verify_logs.py --snapshot final
 | 成功した通信のID | 786件すべてが1回ずつ到着 |
 | 改行 | 全行LFを保持 |
 | 送信元 | AZ1・AZ2とも393行 |
-
 
 ログの全体順序は、複数EC2から共通ストリームへ送る構成では判定基準にしていません。送信元の識別と、行の内容・回数・改行を照合しています。
 
@@ -610,22 +480,15 @@ Direct PUTの計算上の課金対象量は、**各入力レコードを5,120 B�
 ```bash
 # ローテーションを実行し、旧ログと新しいログの権限を確認する
 sudo logrotate -f /etc/logrotate.d/squid
-sudo ls -l /var/log/squid/access.log*
+sudo ls -li /var/log/squid/access.log*
 ```
 
 `logfile_rotate 0`でSquid自身による二重の連番ローテーションを避け、`create 0640 squid squid`で新ファイルの権限をそろえます。
 
-ローテーション直後に保存したSSM応答です。`ls -li`の左端のinodeが異なり、新旧のファイルが別々に存在することを確認しました。両方ともsquid:squid・0640です。
+`ls -li`の左端のinodeが異なり、新旧のファイルが別々に存在することを確認しました。両方ともsquid:squid・0640です。
 
-```text:AZ1の新旧アクセスログ
-1450893 -rw-r-----. 1 squid squid     0 Nov 15 09:54 /var/log/squid/access.log
-1829628 -rw-r-----. 1 squid squid 68189 Nov 15 09:54 /var/log/squid/access.log-20261115095455
-```
-
-```text:AZ2の新旧アクセスログ
-1753621 -rw-r-----. 1 squid squid     0 Nov 15 09:54 /var/log/squid/access.log
-2128205 -rw-r-----. 1 squid squid 68318 Nov 15 09:54 /var/log/squid/access.log-20261115095455
-```
+![両EC2のローテーション後のファイル状態をSSM履歴から取得した実画面](/images/squid-agent/rotation-history-terminal.png)
+*AWS CLIでローテーション直後のSSM実行履歴を取得した実ターミナル画面です。各EC2に、新しいaccess.logと、inodeが異なる日付付きの旧ログがあることを確認できます。*
 
 各EC2でローテーション前後に5アクセスずつ、合計20件を発生させました。旧ファイルと新ファイルの両方を原本として保存し、全20件がS3へ1回ずつ到着することを確認しました。
 
@@ -639,6 +502,9 @@ sudo systemctl restart aws-kinesis-agent
 sudo systemctl status aws-kinesis-agent --no-pager
 sudo tail -n 30 /var/log/aws-kinesis-agent/aws-kinesis-agent.log
 ```
+
+![両EC2のKinesis Agent再起動結果をSSM履歴から取得した実画面](/images/squid-agent/restart-history-terminal.png)
+*検証時の再起動を実行したSSMコマンドについて、Success・実行日時・activeの出力をAWS CLIで取得した実画面です。撮影時に再起動操作を行ったものではありません。*
 
 各EC2で正常再起動の前後に5アクセスずつ、合計20件を発生させました。チェックポイントを保持した状態で、全20件が欠損・重複なくS3へ到着しました。確認したのはKinesis Agentプロセスの正常再起動です。
 
@@ -656,16 +522,16 @@ sudo tail -n 30 /var/log/aws-kinesis-agent/aws-kinesis-agent.log
 | 正常再起動 | 20件 | 20件 |
 | 一時送信失敗からの復旧 | 20件 | 20件 |
 
-今回の送信失敗テストで両EC2に残った、実際の再試行ログの抜粋です。
+再試行ログの確認コマンドです。
 
-```text:Kinesis Agentの再試行ログ
-2026-11-15 10:01:01.671+0000 (sender-0) com.amazon.kinesis.streaming.agent.tailing.AsyncPublisher [ERROR] AsyncPublisher[fh:squidvpce-store-squid:/var/log/squid/access.log*]:RecordBuffer(id=2,records=5,bytes=930) Retriable send error (com.amazonaws.SdkClientException: Unable to execute HTTP request: Connect to 127.0.0.1:9 [/127.0.0.1] failed: Connection refused). Will retry.
-
-2026-11-15 10:01:16.381+0000 (sender-0) com.amazon.kinesis.streaming.agent.tailing.AsyncPublisher [ERROR] AsyncPublisher[fh:squidvpce-store-squid:/var/log/squid/access.log*]:RecordBuffer(id=2,records=5,bytes=945) Retriable send error (com.amazonaws.SdkClientException: Unable to execute HTTP request: Connect to 127.0.0.1:9 [/127.0.0.1] failed: Connection refused). Will retry.
+```bash
+sudo grep -E 'Connection refused|Retriable send error' /var/log/aws-kinesis-agent/aws-kinesis-agent.log | tail -n 1
 ```
 
-今回の結果だけで、異常終了や応答喪失を含むすべての条件で重複が発生しないとは説明できません。収集位置の記録、送信の再試行、S3到着データを合わせて確認し、必要なら下流でリクエストIDなどによる重複排除を設計します。
+![両EC2の送信失敗時の再試行ログをSSM履歴から取得した実画面](/images/squid-agent/retry-history-terminal.png)
+*送信失敗の観測コマンドのSSM実行履歴をAWS CLIで取得し、各EC2の先頭のエラー行を表示した実画面です。Connection refusedとWill retryを確認できます。障害を再発生させた画像ではありません。*
 
+今回の結果だけで、異常終了や応答喪失を含むすべての条件で重複が発生しないとは説明できません。収集位置の記録、送信の再試行、S3到着データを合わせて確認し、必要なら下流でリクエストIDなどによる重複排除を設計します。
 
 **参考資料**
 
