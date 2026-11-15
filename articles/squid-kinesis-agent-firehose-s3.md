@@ -180,7 +180,9 @@ sudo dnf -y install squid aws-kinesis-agent jq
 sudo systemctl status aws-kinesis-agent --no-pager
 ```
 
-構築直後にSSMで実行した確認コマンドです。
+**EC2側で実行した確認コマンド（bash）**
+
+構築直後、SSM経由で次のコマンドを実行しました。
 
 ```bash
 cloud-init status --wait
@@ -190,19 +192,29 @@ systemctl show aws-kinesis-agent -p FragmentPath -p ExecMainStatus -p NRestarts
 rpm -q squid aws-kinesis-agent
 ```
 
-保存したSSM実行履歴は、次のAWS CLIで取得できます。コマンドIDと各EC2 IDは自分の環境の値に置き換えます。
+**Windowsで保存済みの実行結果を確認する（PowerShell）**
+
+上のbashはEC2側の操作です。以降のターミナル画像は、WindowsからSSM履歴や保存ファイルを取得した画面です。各画像の直前には、画像内で実行しているコマンドをそのまま掲載します。
+
+撮影した端末でA側の認証に使ったプロファイル名は`medallion-lab`です。画像と取得コマンドはこの名前でそろえています。構築手順の例にある`provider`を使う場合は、プロファイル名を置き換えてください。
+
+まず、各画面で使用する共通変数を設定します。これは取得コマンドの事前設定です。
 
 ```powershell
-# SSM実行履歴の取得に使う共通引数と、対象のEC2を指定する
-$ssmArgs = @('--profile', 'provider', '--region', 'ap-southeast-2', '--command-id', 'YOUR_COMMAND_ID', '--no-cli-pager')
-$instanceIds = @('YOUR_AZ1_INSTANCE_ID', 'YOUR_AZ2_INSTANCE_ID')
+# 共通設定。IDとプロファイル名は自分の環境の値に置き換える
+$awsA=@('--profile','medallion-lab','--region','ap-southeast-2','--no-cli-pager')
+$ssm=@('--profile','medallion-lab','--region','ap-southeast-2','--command-id','YOUR_INITIAL_INSPECTION_COMMAND_ID','--no-cli-pager')
+$az1='YOUR_AZ1_INSTANCE_ID'
+$az2='YOUR_AZ2_INSTANCE_ID'
+```
 
-foreach ($instanceId in $instanceIds) {
-    # 実行の成功状態と実行日時を取得する
-    aws ssm get-command-invocation @ssmArgs --instance-id $instanceId --query '[Status,ExecutionStartDateTime]' --output text
-    # 保存された出力の先頭12行を取得する
-    aws ssm get-command-invocation @ssmArgs --instance-id $instanceId --query StandardOutputContent --output text | Select-Object -First 12
-}
+**画像で実行したコマンド（Windows / PowerShell）**
+
+```powershell
+aws ssm get-command-invocation @ssm --instance-id $az1 --query "[Status,ExecutionStartDateTime]" --output text
+aws ssm get-command-invocation @ssm --instance-id $az1 --query StandardOutputContent --output text | Select-Object -First 12
+aws ssm get-command-invocation @ssm --instance-id $az2 --query "[Status,ExecutionStartDateTime]" --output text
+aws ssm get-command-invocation @ssm --instance-id $az2 --query StandardOutputContent --output text | Select-Object -First 12
 ```
 
 ![AWS CLIで両EC2のSSM実行履歴を取得したターミナルの実画面](/images/squid-agent/ssm-history-terminal.png)
@@ -212,10 +224,19 @@ foreach ($instanceId in $instanceIds) {
 
 UserDataは`/etc/aws-kinesis/agent.json`とsystemd unitを作り、自動起動を有効にします。Kinesis AgentにはSquidログを読むグループ権限を付け、新しく作られるログも`0640 squid:squid`で読めるようにしました。
 
-EC2上でunitファイルを確認するコマンドです。実行ユーザー、squidグループへの追加、Corretto 17の指定を確認します。
+**EC2上で直接確認する場合（bash）**
+
+unitファイルから、実行ユーザー、squidグループへの追加、Corretto 17の指定を確認します。
 
 ```bash
 sudo cat /etc/systemd/system/aws-kinesis-agent.service
+```
+
+**画像で実行したコマンド（Windows / PowerShell）**
+
+```powershell
+$unitOutput = aws ssm get-command-invocation @ssm --instance-id $az1 --query StandardOutputContent --output text
+[regex]::Match(($unitOutput -join "`n"),'(?ms)^\[Unit\].*?^WantedBy=multi-user.target').Value
 ```
 
 ![SSM実行履歴からunitファイルを取得した実ターミナル画面](/images/squid-agent/agent-unit-terminal.png)
@@ -223,10 +244,19 @@ sudo cat /etc/systemd/system/aws-kinesis-agent.service
 
 チェックポイントは再起動後も残る`/var/lib/aws-kinesis-agent/checkpoints`に置きます。収集位置の記録を消して最初から送り直す方法は使いません。
 
+**EC2上で直接確認する場合（bash）**
+
 ログとチェックポイントの所有者・権限を確認します。構築直後はテストアクセス前のため、`access.log`は0 Bでした。
 
 ```bash
 sudo ls -l /var/log/squid /var/lib/aws-kinesis-agent
+```
+
+**画像で実行したコマンド（Windows / PowerShell）**
+
+```powershell
+aws ssm get-command-invocation @ssm --instance-id $az1 --query StandardOutputContent --output text | Select-Object -Last 10
+aws ssm get-command-invocation @ssm --instance-id $az2 --query StandardOutputContent --output text | Select-Object -Last 10
 ```
 
 ![両EC2のログ権限とチェックポイントを取得した実ターミナル画面](/images/squid-agent/agent-permissions-terminal.png)
@@ -291,6 +321,21 @@ python logging/labctl.py generate --route az2 --count 3 --run smoke-az2
 
 初回疎通では、各AZで3回ずつすべてHTTP 200となり、送信元パブリックIPもそれぞれのSquid EC2と一致しました。
 
+`$proof`は、検証時のreadiness.jsonとLambda応答JSONを保存したフォルダーです。ここでは通信を発生させるコマンドではなく、保存記録を読み出すコマンドを実行しています。
+
+```powershell
+$proof='C:\PATH\TO\SAVED_EVIDENCE'
+```
+
+**画像で実行したコマンド（Windows / PowerShell）**
+
+```powershell
+(Get-Content "$proof\readiness.json" -Raw | ConvertFrom-Json).targets.TargetHealthDescriptions | Select-Object @{n='EC2';e={if($_.Target.Id -eq $az1){'AZ1'}else{'AZ2'}}},@{n='Port';e={$_.Target.Port}},@{n='State';e={$_.TargetHealth.State}} | Format-Table
+(Get-Content "$proof\readiness.json" -Raw | ConvertFrom-Json).endpoint.VpcEndpoints | Select-Object State,VpcEndpointType | Format-Table
+(Get-Content "$proof\az1-response.json" -Raw | ConvertFrom-Json).requests | Select-Object request_id,status | Format-Table
+(Get-Content "$proof\az2-response.json" -Raw | ConvertFrom-Json).requests | Select-Object request_id,status | Format-Table
+```
+
 ![検証時のNLB状態と両AZのLambda成功応答を読み出した実ターミナル画面](/images/squid-agent/both-az-results-terminal.png)
 *検証時に保存したreadiness.jsonと両AZのLambda応答ファイルを、実際のPowerShellで読み出した画面です。NLBの2台をAZ1・AZ2として表示し、各AZで3アクセスずつHTTP 200となった記録を確認できます。撮影時点のNLB状態を取得した画面ではなく、疎通直前・初回疎通の保存記録です。*
 
@@ -310,17 +355,20 @@ python logging/labctl.py generate --route az2 --count 3 --run smoke-az2
 
 前のLambda応答画面と、次のS3ログ画面で、同じリクエストIDを照合します。
 
-S3のオブジェクト一覧と、初回疎通のログを取得します。バケット名・オブジェクトのキー・検索するリクエストIDは、自分の環境に合わせます。
+S3のオブジェクト一覧と、初回疎通のログを取得します。画像で実行したコマンドには、表示するIPとEC2 IDをマスクする処理も含めています。
+
+バケット名とオブジェクトのキーを設定します。検索するリクエストIDも、対象の検証に合わせてください。
 
 ```powershell
-$bucket = 'YOUR_BUCKET_NAME'
-$s3Uri = 's3://YOUR_BUCKET_NAME/YOUR_OBJECT_KEY'
+$bucket='YOUR_BUCKET_NAME'
+$s3Uri='s3://YOUR_BUCKET_NAME/YOUR_OBJECT_KEY'
+```
 
-# 保存先のオブジェクト一覧から先頭3個を確認する
-aws s3api list-objects-v2 --profile provider --region ap-southeast-2 --bucket $bucket --prefix squid/ --query 'Contents[:3].{Key:Key,Size:Size}' --output table
+**画像で実行したコマンド（Windows / PowerShell）**
 
-# 対象オブジェクトを読み、初回疎通の各AZの最初のアクセスを取り出す
-aws s3 cp $s3Uri - --profile provider --region ap-southeast-2 | Select-String -Pattern 'request=fresh-20261115-az[12]-000$'
+```powershell
+aws s3api list-objects-v2 @awsA --bucket $bucket --prefix squid/ --query 'Contents[:3].{Key:Key,Size:Size}' --output table
+aws s3 cp $s3Uri - --profile medallion-lab --region ap-southeast-2 --no-cli-pager | Select-String -Pattern 'request=fresh-20261115-az[12]-000$' | ForEach-Object { $_.Line -replace '\b(?:\d{1,3}\.){3}\d{1,3}\b','[IP]' -replace 'i-[0-9a-f]{17}','[EC2-ID]' }
 ```
 
 ![S3のオブジェクト一覧と実ログをAWS CLIで取得した実ターミナル画面](/images/squid-agent/s3-logs-terminal.png)
@@ -345,14 +393,23 @@ getent ahostsv4 firehose.ap-southeast-2.amazonaws.com
 
 検証時に保存された名前解決結果は、どちらもFirehose用Endpoint ENIのプライベートIP `10.240.1.218`・`10.240.2.201`と一致しています。
 
-Endpointの設定とENIのIPは、次のAWS CLIで確認できます。IDは自分の環境の値に置き換えます。
+WindowsからEndpointの状態・ENIのIPと、両EC2の名前解決の実行履歴を取得します。
+
+Endpoint ID・ENI IDと、名前解決を確認したSSMコマンドIDを設定します。
 
 ```powershell
-# Firehose用Endpointの状態とPrivate DNS設定を取得する
-aws ec2 describe-vpc-endpoints --profile provider --region ap-southeast-2 --vpc-endpoint-ids 'YOUR_FIREHOSE_ENDPOINT_ID' --query 'VpcEndpoints[].{State:State,PrivateDnsEnabled:PrivateDnsEnabled}' --output table
+$endpointId='YOUR_FIREHOSE_ENDPOINT_ID'
+$eniIds=@('YOUR_ENDPOINT_ENI_1_ID','YOUR_ENDPOINT_ENI_2_ID')
+$dnsId='YOUR_DNS_CHECK_SSM_COMMAND_ID'
+```
 
-# Endpointに接続された2つのENIのAZとプライベートIPを取得する
-aws ec2 describe-network-interfaces --profile provider --region ap-southeast-2 --network-interface-ids 'YOUR_ENDPOINT_ENI_1_ID' 'YOUR_ENDPOINT_ENI_2_ID' --query 'NetworkInterfaces[].{AZ:AvailabilityZone,IP:PrivateIpAddress}' --output table
+**画像で実行したコマンド（Windows / PowerShell）**
+
+```powershell
+aws ec2 describe-vpc-endpoints @awsA --vpc-endpoint-ids $endpointId --query 'VpcEndpoints[].{State:State,PrivateDnsEnabled:PrivateDnsEnabled}' --output table
+aws ec2 describe-network-interfaces @awsA --network-interface-ids $eniIds --query 'NetworkInterfaces[].{AZ:AvailabilityZone,IP:PrivateIpAddress}' --output table
+aws ssm get-command-invocation @awsA --command-id $dnsId --instance-id $az1 --query StandardOutputContent --output text | Select-Object -First 1
+aws ssm get-command-invocation @awsA --command-id $dnsId --instance-id $az2 --query StandardOutputContent --output text | Select-Object -First 1
 ```
 
 ![Endpointの状態とENIのIPおよび両EC2の名前解決履歴を取得した実ターミナル画面](/images/squid-agent/private-dns-terminal.png)
@@ -430,21 +487,12 @@ python logging/verify_logs.py --snapshot final
 
 Squidログの内容は可変なので、同じアクセス数・条件でも入力バイト数は一定ではありません。表では実際のバイト数も並べています。蓄積後の結果を、そのまま低頻度のリアルタイム収集の削減率として扱うことはできません。
 
-蓄積後の51,200 B設定について、検証区間のメトリクスを取得するコマンドです。ストリーム名は自分の環境の値に置き換えます。
+蓄積後の51,200 B設定について、検証区間のメトリクスを取得します。画像内と同じプロファイル名・ストリーム名・期間を示します。自分の環境で実行する場合は、それぞれの値を置き換えてください。
+
+**画像で実行したコマンド（Windows / PowerShell）**
 
 ```powershell
-# 対象ストリーム、検証区間（UTC）、60秒単位のSumを指定する
-$streamName = 'YOUR_STREAM_NAME'
-$cw = @(
-    '--profile', 'provider', '--region', 'ap-southeast-2',
-    '--namespace', 'AWS/Firehose',
-    '--dimensions', "Name=DeliveryStreamName,Value=$streamName",
-    '--start-time', '2026-11-15T09:49:00Z',
-    '--end-time', '2026-11-15T09:53:00Z',
-    '--period', '60', '--statistics', 'Sum', '--no-cli-pager'
-)
-
-# 受信レコード数と受信バイト数を取得する
+$cw=@('--profile','medallion-lab','--region','ap-southeast-2','--namespace','AWS/Firehose','--dimensions','Name=DeliveryStreamName,Value=squidvpce-store-squid','--start-time','2026-11-15T09:49:00Z','--end-time','2026-11-15T09:53:00Z','--period','60','--statistics','Sum','--no-cli-pager')
 aws cloudwatch get-metric-statistics @cw --metric-name IncomingRecords --query Datapoints --output json
 aws cloudwatch get-metric-statistics @cw --metric-name IncomingBytes --query Datapoints --output json
 ```
@@ -477,6 +525,8 @@ Direct PUTの計算上の課金対象量は、**各入力レコードを5,120 B�
 
 今回は`copytruncate`ではなく、ファイルのrename、新しいファイルの作成、Squidによる再オープンを使います。Kinesis Agentは`access.log*`を監視するため、旧ファイルも非圧縮のまま残します。
 
+**EC2上で行う操作（bash）**
+
 ```bash
 # ローテーションを実行し、旧ログと新しいログの権限を確認する
 sudo logrotate -f /etc/logrotate.d/squid
@@ -487,12 +537,27 @@ sudo ls -li /var/log/squid/access.log*
 
 `ls -li`の左端のinodeが異なり、新旧のファイルが別々に存在することを確認しました。両方ともsquid:squid・0640です。
 
+ローテーションを行ったSSMコマンドIDを指定します。画像はその実行履歴を取得したものです。
+
+```powershell
+$rotateId='YOUR_ROTATION_SSM_COMMAND_ID'
+```
+
+**画像で実行したコマンド（Windows / PowerShell）**
+
+```powershell
+aws ssm get-command-invocation @awsA --command-id $rotateId --instance-id $az1 --query StandardOutputContent --output text
+aws ssm get-command-invocation @awsA --command-id $rotateId --instance-id $az2 --query StandardOutputContent --output text
+```
+
 ![両EC2のローテーション後のファイル状態をSSM履歴から取得した実画面](/images/squid-agent/rotation-history-terminal.png)
 *AWS CLIでローテーション直後のSSM実行履歴を取得した実ターミナル画面です。各EC2に、新しいaccess.logと、inodeが異なる日付付きの旧ログがあることを確認できます。*
 
 各EC2でローテーション前後に5アクセスずつ、合計20件を発生させました。旧ファイルと新ファイルの両方を原本として保存し、全20件がS3へ1回ずつ到着することを確認しました。
 
 ### Kinesis Agentを再起動する
+
+**EC2上で行う操作（bash）**
 
 ```bash
 # チェックポイントを保持したままKinesis Agentを正常に再起動する
@@ -501,6 +566,19 @@ sudo systemctl restart aws-kinesis-agent
 # 再起動後の状態と進捗ログを確認する
 sudo systemctl status aws-kinesis-agent --no-pager
 sudo tail -n 30 /var/log/aws-kinesis-agent/aws-kinesis-agent.log
+```
+
+再起動を行ったSSMコマンドIDを指定します。画像はその実行履歴を取得したものです。
+
+```powershell
+$restartId='YOUR_RESTART_SSM_COMMAND_ID'
+```
+
+**画像で実行したコマンド（Windows / PowerShell）**
+
+```powershell
+aws ssm get-command-invocation @awsA --command-id $restartId --instance-id $az1 --query "[Status,ExecutionStartDateTime,StandardOutputContent]" --output text
+aws ssm get-command-invocation @awsA --command-id $restartId --instance-id $az2 --query "[Status,ExecutionStartDateTime,StandardOutputContent]" --output text
 ```
 
 ![両EC2のKinesis Agent再起動結果をSSM履歴から取得した実画面](/images/squid-agent/restart-history-terminal.png)
@@ -522,10 +600,23 @@ sudo tail -n 30 /var/log/aws-kinesis-agent/aws-kinesis-agent.log
 | 正常再起動 | 20件 | 20件 |
 | 一時送信失敗からの復旧 | 20件 | 20件 |
 
-再試行ログの確認コマンドです。
+**EC2上で直接確認する場合（bash）**
 
 ```bash
 sudo grep -E 'Connection refused|Retriable send error' /var/log/aws-kinesis-agent/aws-kinesis-agent.log | tail -n 1
+```
+
+送信失敗時のログを確認したSSMコマンドIDを指定します。画像はその実行履歴を取得したものです。
+
+```powershell
+$failureId='YOUR_FAILURE_OBSERVATION_SSM_COMMAND_ID'
+```
+
+**画像で実行したコマンド（Windows / PowerShell）**
+
+```powershell
+aws ssm get-command-invocation @awsA --command-id $failureId --instance-id $az1 --query StandardOutputContent --output text | Select-Object -First 1
+aws ssm get-command-invocation @awsA --command-id $failureId --instance-id $az2 --query StandardOutputContent --output text | Select-Object -First 1
 ```
 
 ![両EC2の送信失敗時の再試行ログをSSM履歴から取得した実画面](/images/squid-agent/retry-history-terminal.png)
