@@ -180,18 +180,95 @@ sudo dnf -y install squid aws-kinesis-agent jq
 sudo systemctl status aws-kinesis-agent --no-pager
 ```
 
-![両EC2で確認したサービス状態とパッケージバージョン](/images/squid-agent/ec2-service-state.png)
-*構築直後のSSM応答を表示した画面です。両EC2でSquidとKinesis Agentがactive・enabledであり、ネイティブunitが読み込まれていることを確認しました。検証時に保存した状態です。*
+構築直後にSSMで実行した確認コマンドです。以下の出力は2026年11月15日の検証時に保存したものです。
+
+```bash
+cloud-init status --wait
+systemctl is-active squid aws-kinesis-agent
+systemctl is-enabled squid aws-kinesis-agent
+systemctl show aws-kinesis-agent -p FragmentPath -p ExecMainStatus -p NRestarts
+```
+
+```text:AZ1の起動確認結果
+status: done
+active
+active
+enabled
+enabled
+NRestarts=0
+ExecMainStatus=0
+FragmentPath=/etc/systemd/system/aws-kinesis-agent.service
+```
+
+```text:AZ2の起動確認結果
+status: done
+active
+active
+enabled
+enabled
+NRestarts=0
+ExecMainStatus=0
+FragmentPath=/etc/systemd/system/aws-kinesis-agent.service
+```
+
+`active`の2行はSquidとKinesis Agentの稼働、`enabled`の2行は両サービスの自動起動を示します。`FragmentPath`からネイティブunitが読み込まれていることも確認しました。
+
+```text:両EC2で確認したパッケージ
+squid-6.13-1.amzn2023.0.7.x86_64
+aws-kinesis-agent-2.0.14-1.amzn2023.noarch
+```
 
 UserDataは`/etc/aws-kinesis/agent.json`とsystemd unitを作り、自動起動を有効にします。Kinesis AgentにはSquidログを読むグループ権限を付け、新しく作られるログも`0640 squid:squid`で読めるようにしました。
 
-![EC2から取得したKinesis Agentのsystemd unit](/images/squid-agent/agent-systemd-unit.png)
-*SSMで取得した実際のunitファイルです。実行ユーザー、squidグループへの追加、Corretto 17の指定、異常終了時の再起動設定を確認できます。*
+実際にEC2から取得したunitファイルです。実行ユーザー、squidグループへの追加、Corretto 17の指定を確認できます。
+
+```ini:/etc/systemd/system/aws-kinesis-agent.service
+[Unit]
+Description=Amazon Kinesis Agent for Squid logs
+Wants=network-online.target
+After=network-online.target squid.service
+[Service]
+Type=simple
+User=aws-kinesis-agent-user
+SupplementaryGroups=squid
+StateDirectory=aws-kinesis-agent
+WorkingDirectory=/var/lib/aws-kinesis-agent
+Environment="JAVACMD=/usr/lib/jvm/java-17-amazon-corretto.x86_64/bin/java"
+Environment="JVM_ARGS=-Dlog4j.configurationFile=file:///etc/aws-kinesis/log4j.xml"
+ExecStart=/usr/bin/start-aws-kinesis-agent -c /etc/aws-kinesis/agent.json
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=90
+UMask=0027
+[Install]
+WantedBy=multi-user.target
+```
 
 チェックポイントは再起動後も残る`/var/lib/aws-kinesis-agent/checkpoints`に置きます。収集位置の記録を消して最初から送り直す方法は使いません。
 
-![両EC2のSquidログ権限とチェックポイントファイル](/images/squid-agent/agent-log-permissions.png)
-*構築直後に取得したls -lの出力です。ログの所有者・権限と、Agentユーザーが所有するチェックポイントを確認しています。この時点ではテストアクセス前のためaccess.logは0 Bです。*
+構築直後の`ls -l`の出力は次のとおりです。この時点ではテストアクセス前のため、`access.log`は0 Bです。
+
+```text:AZ1のログとチェックポイント
+/var/lib/aws-kinesis-agent:
+total 12
+-rw-r-----. 1 aws-kinesis-agent-user aws-kinesis-agent-user 12288 Nov 15 09:13 checkpoints
+
+/var/log/squid:
+total 8
+-rw-r-----. 1 squid squid    0 Nov 15 09:13 access.log
+-rw-r-----. 1 squid squid 6265 Nov 15 09:20 cache.log
+```
+
+```text:AZ2のログとチェックポイント
+/var/lib/aws-kinesis-agent:
+total 12
+-rw-r-----. 1 aws-kinesis-agent-user aws-kinesis-agent-user 12288 Nov 15 09:15 checkpoints
+
+/var/log/squid:
+total 8
+-rw-r-----. 1 squid squid    0 Nov 15 09:14 access.log
+-rw-r-----. 1 squid squid 6494 Nov 15 09:20 cache.log
+```
 
 ### Kinesis AgentとFirehoseの設定
 
@@ -215,8 +292,7 @@ UserDataは`/etc/aws-kinesis/agent.json`とsystemd unitを作り、自動起動�
 
 `initialPosition`は、チェックポイントがないファイルを最初に読む位置です。既存のチェックポイントがある場合の継続位置とは分けて考えます。
 
-![EC2から取得した初期Kinesis Agent設定の画面](/images/squid-agent/agent-config-initial.png)
-*EC2から取得した実際の初期設定を表示した画面。集約は0から比較を開始しています。*
+比較は、EC2から取得した初期設定の`aggregatedRecordSizeBytes: 0`から開始しました。上の設定例は5,120 Bで集約する場合です。
 
 `firehose.endpoint`に指定したURLは、Private DNSによってVPC内のEndpoint ENIへ解決されます。FirehoseからS3への配信はAWSサービス側で行われ、このEC2がS3へ直接ログを送る構成ではありません。
 
@@ -231,8 +307,43 @@ Firehose側はS3向けのバッファを60秒・5MiBとし、圧縮、データ�
 
 NLBの両ターゲットが`healthy`、B側Endpointが`available`であることを確認してから、LambdaでHTTPS通信を発生させます。今回のテスト用LambdaはEndpointのAZ別DNS名を選択できるため、各AZのSquidを個別に通して確認しました。
 
-![NLBの両ターゲットとB側Endpointの準備状態](/images/squid-agent/proxy-readiness.png)
-*疎通前に保存したAWS API応答の抜粋です。NLBの両EC2がhealthy、B側のプロキシ接続用Endpointがavailableで、ENIが2つあることを確認しました。*
+疎通前に取得したAPI応答の抜粋です。EC2 IDとENI IDはマスクしています。
+
+```json:NLBのターゲット状態
+{
+  "TargetHealthDescriptions": [
+    {
+      "Target": {
+        "Id": "[EC2_AZ2]",
+        "Port": 3128
+      },
+      "TargetHealth": {
+        "State": "healthy"
+      }
+    },
+    {
+      "Target": {
+        "Id": "[EC2_AZ1]",
+        "Port": 3128
+      },
+      "TargetHealth": {
+        "State": "healthy"
+      }
+    }
+  ]
+}
+```
+
+```json:B側のプロキシ接続用Endpoint
+{
+  "VpcEndpointType": "Interface",
+  "State": "available",
+  "NetworkInterfaceIds": [
+    "[ENI_1]",
+    "[ENI_2]"
+  ]
+}
+```
 
 ```powershell
 # AZ1のSquidを通して少量の実通信を行う
@@ -244,8 +355,55 @@ python logging/labctl.py generate --route az2 --count 3 --run smoke-az2
 
 この管理スクリプトはLambdaの実行と証跡の保存を行います。Firehoseにログを送るのは、EC2上のKinesis Agentです。
 
-![AZ1・AZ2を指定したLambdaの実行ペイロードと成功応答](/images/squid-agent/both-az-smoke.png)
-*初回疎通で保存した実行ペイロードとLambda応答の抜粋です。各AZで3回ずつすべてHTTP 200となり、送信元パブリックIPもそれぞれのSquid EC2と一致しました。IPはEC2ごとに区別してマスクしています。*
+初回疎通で保存したLambda応答です。各AZで3回ずつすべてHTTP 200となり、送信元パブリックIPもそれぞれのSquid EC2と一致しました。IPはEC2ごとに区別してマスクしています。
+
+```json:AZ1を指定したLambdaの実応答（抜粋）
+{
+  "run": "fresh-20261115-az1",
+  "route": "az1",
+  "requests": [
+    {
+      "request_id": "fresh-20261115-az1-000",
+      "status": 200,
+      "egress_ip": "[EC2_AZ1_PUBLIC_IP]"
+    },
+    {
+      "request_id": "fresh-20261115-az1-001",
+      "status": 200,
+      "egress_ip": "[EC2_AZ1_PUBLIC_IP]"
+    },
+    {
+      "request_id": "fresh-20261115-az1-002",
+      "status": 200,
+      "egress_ip": "[EC2_AZ1_PUBLIC_IP]"
+    }
+  ]
+}
+```
+
+```json:AZ2を指定したLambdaの実応答（抜粋）
+{
+  "run": "fresh-20261115-az2",
+  "route": "az2",
+  "requests": [
+    {
+      "request_id": "fresh-20261115-az2-000",
+      "status": 200,
+      "egress_ip": "[EC2_AZ2_PUBLIC_IP]"
+    },
+    {
+      "request_id": "fresh-20261115-az2-001",
+      "status": 200,
+      "egress_ip": "[EC2_AZ2_PUBLIC_IP]"
+    },
+    {
+      "request_id": "fresh-20261115-az2-002",
+      "status": 200,
+      "egress_ip": "[EC2_AZ2_PUBLIC_IP]"
+    }
+  ]
+}
+```
 
 最初の少量疎通では、各AZで3アクセスずつ、計6アクセスがすべてHTTP 200で成功しました。EC2原本とS3原本はともに6行・1,137 Bで一致し、欠損・余分な行は0でした。集約比較は、この疎通確認と計測区間を分けて行います。
 
@@ -261,11 +419,25 @@ python logging/labctl.py generate --route az2 --count 3 --run smoke-az2
 
 たとえば`fresh-20261115-az1-000`は、初回疎通テストでAZ1側を通した最初のアクセスに付けたIDです。この値がLambdaの成功応答とS3ログの両方に残っていれば、**そのアクセスのログがS3まで届いた**と照合できます。
 
-![Lambdaの成功応答とS3ログに残った同じリクエストID](/images/squid-agent/request-id-trace.png)
-*保存した実応答と実ログから、同じ1回のアクセスを抜き出して並べた画面です。Lambdaのrequest_idとS3ログのrequestが一致しています。*
+同じアクセスについて、Lambda応答とS3ログの識別部分を抜き出すと次のようになります。
 
-![S3へ到着した両EC2の初回疎通ログ](/images/squid-agent/s3-smoke-logs.png)
-*S3ログ原本からAZ1・AZ2の最初のアクセスを1行ずつ表示して撮影しました。sourceでEC2を、requestで個々のアクセスを区別できます。IPとEC2 IDはマスクし、画面上だけで折り返しています。*
+```json:Lambdaの成功応答（抜粋）
+{
+  "request_id": "fresh-20261115-az1-000",
+  "status": 200
+}
+```
+
+```text:対応するS3ログの識別部分
+source=az1 instance=[EC2_AZ1] request=fresh-20261115-az1-000
+```
+
+S3ログ原本から、AZ1・AZ2の最初のアクセスを1行ずつ示します。IPとEC2 IDはマスクしています。`source`でEC2を、`request`で個々のアクセスを区別できます。
+
+```text:S3に保存されたSquidログ（抜粋）
+1794734415.962    283 [IP] TCP_TUNNEL/200 4960 CONNECT checkip.amazonaws.com:443 - HIER_DIRECT/[IP] - source=az1 instance=[EC2_AZ1] request=fresh-20261115-az1-000
+1794734418.844    284 [IP] TCP_TUNNEL/200 4956 CONNECT checkip.amazonaws.com:443 - HIER_DIRECT/[IP] - source=az2 instance=[EC2_AZ2] request=fresh-20261115-az2-000
+```
 
 HTTPSでは、SquidはCONNECT要求で接続先のホストとポートを受け取りますが、その後のTLS通信内のURLパスは読めません。今回はLambdaがCONNECT時の`X-Lab-Request`ヘッダーへ検証用IDを入れ、Squidの`%{X-Lab-Request}>h`でその値をログに残しています。これは検証の照合用に追加した仕組みです。
 
@@ -284,15 +456,55 @@ getent ahostsv4 firehose.ap-southeast-2.amazonaws.com
 
 さらに、配布したEC2ロールの送信ポリシーをIAMポリシーシミュレーターで評価し、`aws:SourceVpce`に今回のEndpointを指定すると許可、条件がない場合は`implicitDeny`となることを確認しました。実際の収集では、Kinesis Agentの送信成功記録とS3に保存されたログも合わせて確認します。
 
-![Firehose用Endpoint・Private DNS・送信ポリシーの検証結果](/images/squid-agent/firehose-private-network.png)
-*Endpoint・ENIのAWS API応答、EC2から取得した名前解決結果、配布した送信ポリシーの評価結果を表示した画面です。IAMの評価は送信ポリシー単体の確認で、実ログのS3到着は後述の照合で確認しています。*
+SSM応答に保存された名前解決結果は次のとおりです。どちらも、Firehose用Endpoint ENIのプライベートIP `10.240.1.218`・`10.240.2.201`と一致しています。
+
+```json:AZ1で取得した名前解決結果
+{
+  "hostname": "firehose.ap-southeast-2.amazonaws.com",
+  "resolved_ipv4": [
+    "10.240.1.218",
+    "10.240.2.201"
+  ]
+}
+```
+
+```json:AZ2で取得した名前解決結果
+{
+  "hostname": "firehose.ap-southeast-2.amazonaws.com",
+  "resolved_ipv4": [
+    "10.240.1.218",
+    "10.240.2.201"
+  ]
+}
+```
+
+| 送信ポリシー単体の評価条件 | 結果 |
+|---|---|
+| 今回のEndpointを`aws:SourceVpce`に指定 | `allowed` |
+| `aws:SourceVpce`の条件なし | `implicitDeny` |
 
 ### S3オブジェクトと入力レコードは別の単位
 
 S3には、Firehoseの配信バッファに応じて作られたオブジェクトが保存されます。**S3ファイルが1個になったことだけでは、Kinesis Agentが1レコードに集約したとは判断できません。** 複数のFirehose入力レコードも、同じS3ファイルに入ります。
 
-![集約比較中のS3到着オブジェクト](/images/squid-agent/s3-arrival-comparison.png)
-*今回のS3から取得したログオブジェクトのキーとサイズを表示した画面です。オブジェクト数と、Firehoseの入力レコード数は異なります。*
+S3から取得したログオブジェクトは10個です。先頭3個のキーとサイズを示します。これはS3オブジェクトの一覧であり、Firehoseの入力レコード一覧ではありません。
+
+```json:取得したS3オブジェクト一覧（先頭3個の抜粋）
+[
+  {
+    "Key": "squid/2026/11/15/09/squidvpce-store-squid-1-2026-11-15-09-21-18-7583ddea-a329-4d3d-921b-933d079329e8",
+    "Size": 1137
+  },
+  {
+    "Key": "squid/2026/11/15/09/squidvpce-store-squid-1-2026-11-15-09-25-18-155332e9-454b-49b3-bd7b-280dca1cd001",
+    "Size": 22240
+  },
+  {
+    "Key": "squid/2026/11/15/09/squidvpce-store-squid-1-2026-11-15-09-30-17-870b7fc0-e78c-4554-a4e9-82e48cc16cff",
+    "Size": 22240
+  }
+]
+```
 
 ### 原本同士を照合する
 
@@ -315,8 +527,6 @@ python logging/verify_logs.py --snapshot final
 | 改行 | 全行LFを保持 |
 | 送信元 | AZ1・AZ2とも393行 |
 
-![EC2原本とS3原本の照合結果](/images/squid-agent/verification-final-capture.png)
-*今回のPrivateLink構成から取得したEC2・S3ログ原本を照合した結果です。786行・146,012 Bの一致、欠損・余分な行0、成功ID786件を確認しました。*
 
 ログの全体順序は、複数EC2から共通ストリームへ送る構成では判定基準にしていません。送信元の識別と、行の内容・回数・改行を照合しています。
 
@@ -350,8 +560,7 @@ python logging/verify_logs.py --snapshot final
 | 蓄積後に開始 | 5,120 B | 120 | 6 | 22,240 B | 3,706.7 B |
 | 蓄積後に開始 | 51,200 B | 120 | 2 | 22,300 B | 11,150.0 B |
 
-![6条件のCloudWatch Sum・Kinesis Agent送信成功・EC2原本の比較画面](/images/squid-agent/comparison-sums-capture.png)
-*Firehose用Endpointを使った今回の6条件の測定結果です。CloudWatch APIのSum、Kinesis Agentの送信成功記録、EC2原本を並べて照合しています。*
+6条件すべてで、CloudWatch APIのSumとKinesis Agentの送信成功記録について、レコード数・バイト数が一致しました。EC2原本のバイト数とも一致しています。
 
 通常の追記では、集約サイズを5,120 B、51,200 Bにしても120レコードのままでした。今回の追記間隔と100msのポーリングでは、読み込む範囲に1行ずつ現れるためです。送信バッファに60秒保持する動作が、その後の行との再集約を行うわけではありません。
 
@@ -359,8 +568,30 @@ python logging/verify_logs.py --snapshot final
 
 Squidログの内容は可変なので、同じアクセス数・条件でも入力バイト数は一定ではありません。表では実際のバイト数も並べています。蓄積後の結果を、そのまま低頻度のリアルタイム収集の削減率として扱うことはできません。
 
-![Firehoseの受信メトリクスをAPIで取得した画面](/images/squid-agent/firehose-monitoring-comparison.png)
-*蓄積後の51,200 B設定について、CloudWatch APIで取得したIncomingRecords・IncomingBytesの時刻、Sum、単位を表示しています。*
+蓄積後の51,200 B設定について、CloudWatch APIで取得した実応答のデータポイントです。
+
+```json:CloudWatchの取得結果（抜粋）
+{
+  "IncomingRecords": {
+    "Datapoints": [
+      {
+        "Timestamp": "2026-11-15 18:51:00+09:00",
+        "Sum": 2.0,
+        "Unit": "Count"
+      }
+    ]
+  },
+  "IncomingBytes": {
+    "Datapoints": [
+      {
+        "Timestamp": "2026-11-15 18:51:00+09:00",
+        "Sum": 22300.0,
+        "Unit": "Bytes"
+      }
+    ]
+  }
+}
+```
 
 各計測区間の`IncomingBytes`と`IncomingRecords`はSumで取得し、Kinesis Agentが成功応答を記録したレコード数・バイト数、EC2/S3の原本と照合しました。前方式の未送信レコードが次の方式に混ざらないよう、区間を分けています。
 
@@ -395,8 +626,17 @@ sudo ls -l /var/log/squid/access.log*
 
 `logfile_rotate 0`でSquid自身による二重の連番ローテーションを避け、`create 0640 squid squid`で新ファイルの権限をそろえます。
 
-![両EC2でローテーション後に確認した新旧アクセスログ](/images/squid-agent/logrotate-files.png)
-*保存したSSM応答を表示した画面です。inodeが異なる旧ファイルと新しいaccess.logがあり、両方ともsquid:squid・0640であることを確認しました。*
+ローテーション直後に保存したSSM応答です。`ls -li`の左端のinodeが異なり、新旧のファイルが別々に存在することを確認しました。両方ともsquid:squid・0640です。
+
+```text:AZ1の新旧アクセスログ
+1450893 -rw-r-----. 1 squid squid     0 Nov 15 09:54 /var/log/squid/access.log
+1829628 -rw-r-----. 1 squid squid 68189 Nov 15 09:54 /var/log/squid/access.log-20261115095455
+```
+
+```text:AZ2の新旧アクセスログ
+1753621 -rw-r-----. 1 squid squid     0 Nov 15 09:54 /var/log/squid/access.log
+2128205 -rw-r-----. 1 squid squid 68318 Nov 15 09:54 /var/log/squid/access.log-20261115095455
+```
 
 各EC2でローテーション前後に5アクセスずつ、合計20件を発生させました。旧ファイルと新ファイルの両方を原本として保存し、全20件がS3へ1回ずつ到着することを確認しました。
 
@@ -419,8 +659,21 @@ sudo tail -n 30 /var/log/aws-kinesis-agent/aws-kinesis-agent.log
 
 両EC2で`Connection refused`と`Retriable send error ... Will retry`を確認しました。送信できない間に生成した10件と、元の設定へ戻してKinesis Agentを再起動した後の10件は、全20件がS3へ1回ずつ到着しています。復旧時にもチェックポイントは削除していません。
 
-![ローテーション・再起動・一時送信失敗の照合結果と実エラーログ](/images/squid-agent/continuity-capture.png)
-*保存済みの送信記録とS3原本を照合し、各20件が1回ずつ到着したことを確認した画面です。下部は今回の送信失敗テストで両EC2に残った実エラーログの抜粋です。保存済み証跡を表示して撮影しており、障害を再発生させた画像ではありません。*
+保存した送信記録とS3原本を照合した結果は次のとおりです。
+
+| 条件 | HTTP 200 | S3へ1回ずつ到着 |
+|---|---:|---:|
+| ローテーション | 20件 | 20件 |
+| 正常再起動 | 20件 | 20件 |
+| 一時送信失敗からの復旧 | 20件 | 20件 |
+
+今回の送信失敗テストで両EC2に残った、実際の再試行ログの抜粋です。
+
+```text:Kinesis Agentの再試行ログ
+2026-11-15 10:01:01.671+0000 (sender-0) com.amazon.kinesis.streaming.agent.tailing.AsyncPublisher [ERROR] AsyncPublisher[fh:squidvpce-store-squid:/var/log/squid/access.log*]:RecordBuffer(id=2,records=5,bytes=930) Retriable send error (com.amazonaws.SdkClientException: Unable to execute HTTP request: Connect to 127.0.0.1:9 [/127.0.0.1] failed: Connection refused). Will retry.
+
+2026-11-15 10:01:16.381+0000 (sender-0) com.amazon.kinesis.streaming.agent.tailing.AsyncPublisher [ERROR] AsyncPublisher[fh:squidvpce-store-squid:/var/log/squid/access.log*]:RecordBuffer(id=2,records=5,bytes=945) Retriable send error (com.amazonaws.SdkClientException: Unable to execute HTTP request: Connect to 127.0.0.1:9 [/127.0.0.1] failed: Connection refused). Will retry.
+```
 
 今回の結果だけで、異常終了や応答喪失を含むすべての条件で重複が発生しないとは説明できません。収集位置の記録、送信の再試行、S3到着データを合わせて確認し、必要なら下流でリクエストIDなどによる重複排除を設計します。
 
