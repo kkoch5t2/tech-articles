@@ -64,7 +64,7 @@ Kinesis AgentのCloudWatch独自メトリクスは`cloudwatch.emitMetrics: false
 
 https://github.com/kkoch5t2/aws-privatelink-proxy/tree/feat/squid-kinesis-agent-logging/logging
 
-操作例ではA側のAWSプロファイルを`provider`、B側を`consumer`としています。各作成の間に状態を確認し、先行するスタックが完成してから次へ進みます。保持環境で使った補完スタックの指定はREADMEを参照してください。
+操作例ではA側のAWSプロファイルを`provider`、B側を`consumer`としています。各作成の間に状態を確認し、先行するスタックが完成してから次へ進みます。
 
 ```powershell
 # A・Bの認証先と既存リソースを確認する
@@ -85,28 +85,6 @@ python logging/labctl.py consumer
 # B側Endpointの接続要求をA側で承認する
 python logging/labctl.py accept
 ```
-
-### 修正版テンプレートで新規構築を確認する
-
-2026年11月15日、配布する3つのテンプレートを変更せず、既存環境とは別名のスタックで環境全体を新規作成しました。Endpointの接続承認は通常の手順として実施し、SSMによる設定修正や`01b-existing-provider-link.json`による補完は行っていません。
-
-| アカウント | スタック | 結果 |
-|---|---|---|
-| A | `squidfresh-store`（S3・Firehose） | `CREATE_COMPLETE` |
-| A | `squidfresh-a`（Squid・Kinesis Agent・NLBなど） | `CREATE_COMPLETE` |
-| B | `squidfresh-b`（Endpoint・Lambdaなど） | `CREATE_COMPLETE` |
-
-![新規作成したA側の2スタックが完了したCloudFormation画面](/images/squid-agent/clean-deploy-cloudformation.png)
-*A側のログ保存先とプロキシ構成が、いずれも`CREATE_COMPLETE`になった実画面です。*
-
-2台のEC2は、UserDataだけでSquidとKinesis Agentの導入・設定・自動起動まで完了しました。読み取り確認では、両サービスが`active`・`enabled`、Kinesis Agentの再起動回数が0であることを確認しています。
-
-さらに、B側のLambdaから各AZへ3回ずつ、計6回の実通信を行い、すべてHTTP 200で成功しました。生成されたSquidログはEC2・S3とも**6行・1,134 B**で一致し、欠損・余分な行は0、6件のリクエストIDもすべて1回ずつ到着しています。
-
-![新規構築した3スタック・サービス起動・S3ログ照合の確認結果](/images/squid-agent/clean-deploy-verification.png)
-*今回の新規構築で取得したAWS API応答とSSMの読み取り結果をNAB7で表示した画面です。初回の802行の集約比較とは別の、追加検証の結果です。*
-
-初回構築時の修復・補完の経緯はREADMEに残しています。以下の集約比較と継続収集の実測値には、初回検証の原本を使用しています。
 
 ### AL2023へのKinesis Agent導入とサービス管理
 
@@ -326,8 +304,6 @@ sudo tail -n 30 /var/log/aws-kinesis-agent/aws-kinesis-agent.log
 *保存済みの送信記録とS3原本を照合し、各20件が1回ずつ到着したことを確認した画面です。下部は初回検証で両EC2に残った実エラーログの抜粋です。保存済み証跡をNAB7で表示して撮影しており、障害を再発生させた画像ではありません。*
 
 今回の結果だけで、異常終了や応答喪失を含むすべての条件で重複が発生しないとは説明できません。収集位置の記録、送信の再試行、S3到着データを合わせて確認し、必要なら下流でリクエストIDなどによる重複排除を設計します。
-
-追加検証用の環境は、原本・証跡を保存したうえで削除しました。初回環境はEC2を停止した状態で保持し、ログや証跡も保存しています。初回環境に残るNLB・VPC Endpoint・EBS・S3などの課金は続きます。
 
 
 **参考資料**
