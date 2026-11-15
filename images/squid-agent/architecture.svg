@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2700" height="1770" viewBox="0 0 2700 1770">
+<defs>
+<marker id="blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#285cc4"/></marker>
+<marker id="purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#7043b8"/></marker>
+<marker id="green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#087f80"/></marker>
+<marker id="orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#c57618"/></marker>
+</defs>
+<rect width="2700" height="1770" fill="white"/>
+<g font-family="Noto Sans CJK JP, Yu Gothic, sans-serif" fill="#18304b">
+<text x="60" y="88" font-size="48" fill="#18304b" font-weight="700" text-anchor="start">SquidのアクセスログをKinesis Agent → Firehose → S3へ</text>
+<text x="60" y="149" font-size="30" fill="#536982" font-weight="400" text-anchor="start">Sydney / ap-southeast-2　既存の2AZ構成に、各EC2からのログ収集を追加</text>
+<rect x="50" y="220" width="800" height="1415" rx="24" stroke="#b6a3d8" stroke-width="3" fill="#fcfaff"/>
+<rect x="990" y="220" width="1200" height="1415" rx="24" stroke="#85c8bf" stroke-width="3" fill="#f8fcfb"/>
+<text x="80" y="275" font-size="36" fill="#7043b8" font-weight="700" text-anchor="start">アカウントB｜利用側</text>
+<text x="1020" y="275" font-size="36" fill="#087f80" font-weight="700" text-anchor="start">アカウントA｜提供側</text>
+<rect x="75" y="305" width="750" height="865" rx="17" stroke="#b6a3d8" stroke-width="2" fill="#fcfaff"/>
+<rect x="1015" y="305" width="1150" height="865" rx="17" stroke="#85c8bf" stroke-width="2" fill="#f8fcfb"/>
+<text x="95" y="351" font-size="29" fill="#7043b8" font-weight="700" text-anchor="start">VPC 10.241.0.0/16</text>
+<text x="1040" y="351" font-size="29" fill="#087f80" font-weight="700" text-anchor="start">VPC 10.240.0.0/16</text>
+<rect x="130" y="385" width="625" height="95" rx="17" stroke="#7043b8" stroke-width="2" fill="white"/>
+<text x="442" y="427" font-size="31" fill="#7043b8" font-weight="700" text-anchor="middle">Lambda ×1</text>
+<text x="442" y="461" font-size="24" fill="#536982" font-weight="400" text-anchor="middle">2サブネットをVPC接続に指定</text>
+<text x="527" y="520" font-size="25" fill="#7043b8" font-weight="700" text-anchor="start">Interface Endpoint ×1</text>
+<rect x="1050" y="385" width="1080" height="95" rx="17" stroke="#087f80" stroke-width="2" fill="#edf8f4"/>
+<text x="1590" y="427" font-size="31" fill="#087f80" font-weight="700" text-anchor="middle">Endpoint Service ×1</text>
+<text x="1590" y="461" font-size="24" fill="#536982" font-weight="400" text-anchor="middle">内部NLBに関連付け ／ Bを許可 ／ 接続要求を承認</text>
+<text x="1115" y="520" font-size="28" fill="#087f80" font-weight="700" text-anchor="start">Internal NLB ×1</text>
+<text x="1485" y="520" font-size="25" fill="#087f80" font-weight="700" text-anchor="start">TCP 3128 → Target group ×1</text>
+<rect x="100" y="560" width="700" height="260" rx="17" stroke="#c5b4df" stroke-width="2" fill="#f4eef9"/>
+<text x="120" y="598" font-size="26" fill="#7043b8" font-weight="700" text-anchor="start">apse2-az1 / Private 10.241.1.0/24</text>
+<rect x="125" y="658" width="265" height="117" rx="17" stroke="#7043b8" stroke-width="2" fill="white"/>
+<text x="257" y="703" font-size="28" fill="#7043b8" font-weight="700" text-anchor="middle">Lambda VPC接続</text>
+<text x="257" y="742" font-size="23" fill="#536982" font-weight="400" text-anchor="middle">ENI（サブネット側）</text>
+<rect x="525" y="658" width="250" height="117" rx="17" stroke="#7043b8" stroke-width="2" fill="white"/>
+<text x="650" y="703" font-size="26" fill="#7043b8" font-weight="700" text-anchor="middle">Endpoint ENI #1</text>
+<text x="650" y="742" font-size="23" fill="#536982" font-weight="400" text-anchor="middle">プライベートIPv4</text>
+<path d="M390 714 H525" fill="none" stroke="#7043b8" stroke-width="4" stroke-linejoin="round" marker-end="url(#purple)"/>
+<text x="451" y="694" font-size="23" fill="#7043b8" font-weight="400" text-anchor="middle">3128</text>
+<rect x="1045" y="560" width="930" height="260" rx="17" stroke="#acd5cc" stroke-width="2" fill="#edf8f4"/>
+<text x="1065" y="598" font-size="26" fill="#087f80" font-weight="700" text-anchor="start">apse2-az1 / Public 10.240.1.0/24</text>
+<rect x="1095" y="658" width="275" height="117" rx="17" stroke="#087f80" stroke-width="2" fill="white"/>
+<text x="1232" y="703" font-size="28" fill="#087f80" font-weight="700" text-anchor="middle">NLB node #1</text>
+<text x="1232" y="742" font-size="23" fill="#536982" font-weight="400" text-anchor="middle">プライベートIPv4</text>
+<path d="M775 714 H1095" fill="none" stroke="#285cc4" stroke-width="4" stroke-linejoin="round" marker-end="url(#blue)"/>
+<text x="930" y="689" font-size="28" fill="#285cc4" font-weight="700" text-anchor="middle">PrivateLink</text>
+<path d="M1370 714 H1505" fill="none" stroke="#087f80" stroke-width="4" stroke-linejoin="round" marker-end="url(#green)"/>
+<text x="1436" y="694" font-size="23" fill="#087f80" font-weight="400" text-anchor="middle">3128</text>
+<rect x="1505" y="630" width="400" height="170" rx="17" stroke="#087f80" stroke-width="2" fill="white"/>
+<text x="1705" y="668" font-size="29" fill="#087f80" font-weight="700" text-anchor="middle">Squid EC2 #1</text>
+<text x="1705" y="701" font-size="22" fill="#536982" font-weight="400" text-anchor="middle">AL2023 / t3.micro / Public IPv4</text>
+<rect x="1520" y="719" width="370" height="66" rx="10" stroke="#e2a85e" stroke-width="2" fill="#fff7e9"/>
+<text x="1705" y="747" font-size="24" fill="#c57618" font-weight="700" text-anchor="middle">access.log → Kinesis Agent</text>
+<text x="1705" y="776" font-size="21" fill="#c57618" font-weight="400" text-anchor="middle">source=az1 ＋ instance ID</text>
+<path d="M1905 670 H2025" fill="none" stroke="#087f80" stroke-width="4" stroke-linejoin="round" marker-end="url(#green)"/>
+<text x="1966" y="654" font-size="23" fill="#087f80" font-weight="400" text-anchor="middle">443</text>
+<path d="M1890 760 H2025" fill="none" stroke="#c57618" stroke-width="4" stroke-linejoin="round" marker-end="url(#orange)" stroke-dasharray="11 7"/>
+<rect x="100" y="855" width="700" height="260" rx="17" stroke="#c5b4df" stroke-width="2" fill="#f4eef9"/>
+<text x="120" y="893" font-size="26" fill="#7043b8" font-weight="700" text-anchor="start">apse2-az2 / Private 10.241.2.0/24</text>
+<rect x="125" y="953" width="265" height="117" rx="17" stroke="#7043b8" stroke-width="2" fill="white"/>
+<text x="257" y="998" font-size="28" fill="#7043b8" font-weight="700" text-anchor="middle">Lambda VPC接続</text>
+<text x="257" y="1037" font-size="23" fill="#536982" font-weight="400" text-anchor="middle">ENI（サブネット側）</text>
+<rect x="525" y="953" width="250" height="117" rx="17" stroke="#7043b8" stroke-width="2" fill="white"/>
+<text x="650" y="998" font-size="26" fill="#7043b8" font-weight="700" text-anchor="middle">Endpoint ENI #2</text>
+<text x="650" y="1037" font-size="23" fill="#536982" font-weight="400" text-anchor="middle">プライベートIPv4</text>
+<path d="M390 1009 H525" fill="none" stroke="#7043b8" stroke-width="4" stroke-linejoin="round" marker-end="url(#purple)"/>
+<text x="451" y="989" font-size="23" fill="#7043b8" font-weight="400" text-anchor="middle">3128</text>
+<rect x="1045" y="855" width="930" height="260" rx="17" stroke="#acd5cc" stroke-width="2" fill="#edf8f4"/>
+<text x="1065" y="893" font-size="26" fill="#087f80" font-weight="700" text-anchor="start">apse2-az2 / Public 10.240.2.0/24</text>
+<rect x="1095" y="953" width="275" height="117" rx="17" stroke="#087f80" stroke-width="2" fill="white"/>
+<text x="1232" y="998" font-size="28" fill="#087f80" font-weight="700" text-anchor="middle">NLB node #2</text>
+<text x="1232" y="1037" font-size="23" fill="#536982" font-weight="400" text-anchor="middle">プライベートIPv4</text>
+<path d="M775 1009 H1095" fill="none" stroke="#285cc4" stroke-width="4" stroke-linejoin="round" marker-end="url(#blue)"/>
+<text x="930" y="984" font-size="28" fill="#285cc4" font-weight="700" text-anchor="middle">PrivateLink</text>
+<path d="M1370 1009 H1505" fill="none" stroke="#087f80" stroke-width="4" stroke-linejoin="round" marker-end="url(#green)"/>
+<text x="1436" y="989" font-size="23" fill="#087f80" font-weight="400" text-anchor="middle">3128</text>
+<rect x="1505" y="925" width="400" height="170" rx="17" stroke="#087f80" stroke-width="2" fill="white"/>
+<text x="1705" y="963" font-size="29" fill="#087f80" font-weight="700" text-anchor="middle">Squid EC2 #2</text>
+<text x="1705" y="996" font-size="22" fill="#536982" font-weight="400" text-anchor="middle">AL2023 / t3.micro / Public IPv4</text>
+<rect x="1520" y="1014" width="370" height="66" rx="10" stroke="#e2a85e" stroke-width="2" fill="#fff7e9"/>
+<text x="1705" y="1042" font-size="24" fill="#c57618" font-weight="700" text-anchor="middle">access.log → Kinesis Agent</text>
+<text x="1705" y="1071" font-size="21" fill="#c57618" font-weight="400" text-anchor="middle">source=az2 ＋ instance ID</text>
+<path d="M1905 965 H2025" fill="none" stroke="#087f80" stroke-width="4" stroke-linejoin="round" marker-end="url(#green)"/>
+<text x="1966" y="949" font-size="23" fill="#087f80" font-weight="400" text-anchor="middle">443</text>
+<path d="M1890 1055 H2025" fill="none" stroke="#c57618" stroke-width="4" stroke-linejoin="round" marker-end="url(#orange)" stroke-dasharray="11 7"/>
+<rect x="2025" y="620" width="110" height="460" rx="17" stroke="#c57618" stroke-width="2" fill="#fffaf0"/>
+<text x="2080" y="675" font-size="29" fill="#c57618" font-weight="700" text-anchor="middle">IGW</text>
+<text x="2080" y="728" font-size="27" fill="#536982" font-weight="400" text-anchor="middle">×1</text>
+<text x="2080" y="850" font-size="23" fill="#536982" font-weight="400" text-anchor="middle">外向き</text>
+<text x="2080" y="885" font-size="23" fill="#536982" font-weight="400" text-anchor="middle">経路を</text>
+<text x="2080" y="920" font-size="23" fill="#536982" font-weight="400" text-anchor="middle">共用</text>
+<rect x="2320" y="630" width="330" height="440" rx="17" stroke="#d8a151" stroke-width="2" fill="#fffaf0"/>
+<text x="2485" y="692" font-size="31" fill="#c57618" font-weight="700" text-anchor="middle">インターネット</text>
+<text x="2485" y="778" font-size="23" fill="#18304b" font-weight="700" text-anchor="middle">checkip.amazonaws.com</text>
+<text x="2485" y="844" font-size="27" fill="#536982" font-weight="400" text-anchor="middle">HTTPS / TCP 443</text>
+<text x="2485" y="940" font-size="23" fill="#536982" font-weight="400" text-anchor="middle">接続先はSquidで制限</text>
+<path d="M2135 670 H2320" fill="none" stroke="#087f80" stroke-width="4" stroke-linejoin="round" marker-end="url(#green)"/>
+<path d="M2135 965 H2320" fill="none" stroke="#087f80" stroke-width="4" stroke-linejoin="round" marker-end="url(#green)"/>
+<text x="1335" y="1150" font-size="25" fill="#087f80" font-weight="400" text-anchor="middle">同じ2台のEC2内でSquidとAgentを実行</text>
+<text x="450" y="1150" font-size="25" fill="#7043b8" font-weight="400" text-anchor="middle">1つのEndpointにENIを2つ作成</text>
+<rect x="75" y="1205" width="750" height="400" rx="17" stroke="#c5b4df" stroke-width="2" fill="white"/>
+<text x="100" y="1258" font-size="31" fill="#7043b8" font-weight="700" text-anchor="start">接続制御と共通設定</text>
+<text x="100" y="1320" font-size="26" fill="#536982" font-weight="400" text-anchor="start">ルート：VPC localのみ（IGW / NATなし）</text>
+<text x="100" y="1376" font-size="26" fill="#536982" font-weight="400" text-anchor="start">Endpoint：Lambda SGからTCP 3128を許可</text>
+<text x="100" y="1432" font-size="26" fill="#536982" font-weight="400" text-anchor="start">HTTPSは明示的にプロキシを指定</text>
+<text x="100" y="1488" font-size="26" fill="#536982" font-weight="400" text-anchor="start">SSHのインバウンド開放なし</text>
+<path d="M2080 1080 V1235 H1005 V1448 H1050" fill="none" stroke="#c57618" stroke-width="4" stroke-linejoin="round" marker-end="url(#orange)" stroke-dasharray="11 7"/>
+<text x="1560" y="1220" font-size="27" fill="#c57618" font-weight="700" text-anchor="middle">ログ：公開APIへHTTPS / 443</text>
+<text x="1040" y="1304" font-size="29" fill="#c57618" font-weight="700" text-anchor="start">今回追加｜VPC外のリージョンサービス</text>
+<rect x="1050" y="1365" width="400" height="165" rx="17" stroke="#d9a05a" stroke-width="2" fill="#fff7e9"/>
+<text x="1250" y="1414" font-size="28" fill="#c57618" font-weight="700" text-anchor="middle">Amazon Data Firehose ×1</text>
+<text x="1250" y="1460" font-size="24" fill="#536982" font-weight="400" text-anchor="middle">Direct PUT ／ 共通ストリーム</text>
+<text x="1250" y="1498" font-size="24" fill="#536982" font-weight="400" text-anchor="middle">S3配信：60秒・5 MiB</text>
+<rect x="1700" y="1365" width="400" height="165" rx="17" stroke="#70b28e" stroke-width="2" fill="#f2faf3"/>
+<text x="1900" y="1414" font-size="31" fill="#3a8060" font-weight="700" text-anchor="middle">Amazon S3 ×1</text>
+<text x="1900" y="1460" font-size="24" fill="#536982" font-weight="400" text-anchor="middle">両EC2のログを共通バケットへ</text>
+<text x="1900" y="1498" font-size="24" fill="#536982" font-weight="400" text-anchor="middle">非公開・暗号化・自動削除なし</text>
+<path d="M1450 1448 H1700" fill="none" stroke="#c57618" stroke-width="4" stroke-linejoin="round" marker-end="url(#orange)" stroke-dasharray="11 7"/>
+<text x="1575" y="1425" font-size="24" fill="#c57618" font-weight="400" text-anchor="middle">ログを配信</text>
+<text x="1040" y="1582" font-size="24" fill="#087f80" font-weight="400" text-anchor="start">EC2ロールで認証 ／ Firehose用Interface Endpointは追加しない</text>
+<path d="M65 1687 H150" fill="none" stroke="#087f80" stroke-width="4" stroke-linejoin="round" marker-end="url(#green)"/>
+<text x="170" y="1697" font-size="26" fill="#536982" font-weight="400" text-anchor="start">既存のプロキシ通信（要求の向き）</text>
+<path d="M1000 1687 H1085" fill="none" stroke="#c57618" stroke-width="4" stroke-linejoin="round" marker-end="url(#orange)" stroke-dasharray="11 7"/>
+<text x="1105" y="1697" font-size="26" fill="#536982" font-weight="400" text-anchor="start">追加したログ収集・保存</text>
+<text x="60" y="1750" font-size="25" fill="#536982" font-weight="400" text-anchor="start">検証構成の再現図。応答は確立済み接続を戻る。各AZの代表経路であり、常に同一AZになることは保証しない。</text>
+</g></svg>
