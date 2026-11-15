@@ -180,46 +180,35 @@ sudo dnf -y install squid aws-kinesis-agent jq
 sudo systemctl status aws-kinesis-agent --no-pager
 ```
 
-構築直後にSSMで実行した確認コマンドです。以下の出力は2026年11月15日の検証時に保存したものです。
-
-![AWS CLIで両EC2のSSM実行履歴を取得したターミナルの実画面](/images/squid-agent/ssm-history-terminal.png)
-*2026年11月16日に、AWS CLIのget-command-invocationで検証時のSSM実行履歴を取得し、実際のWindows Terminalを撮影しました。AZ1・AZ2の成功状態、実行日時、サービス状態とパッケージを確認できます。`@ssm`はプロファイル・リージョン・コマンドIDの共通引数、`$az1`・`$az2`は各EC2 IDです。出力は先頭12行の抜粋です。EC2上でこれらの確認コマンドを再実行した画面ではありません。*
+構築直後にSSMで実行した確認コマンドです。
 
 ```bash
 cloud-init status --wait
 systemctl is-active squid aws-kinesis-agent
 systemctl is-enabled squid aws-kinesis-agent
 systemctl show aws-kinesis-agent -p FragmentPath -p ExecMainStatus -p NRestarts
+rpm -q squid aws-kinesis-agent
 ```
 
-```text:AZ1の起動確認結果
-status: done
-active
-active
-enabled
-enabled
-NRestarts=0
-ExecMainStatus=0
-FragmentPath=/etc/systemd/system/aws-kinesis-agent.service
+保存したSSM実行履歴は、次のAWS CLIで取得できます。コマンドIDと各EC2 IDは自分の環境の値に置き換えます。
+
+```powershell
+# SSM実行履歴の取得に使う共通引数と、対象のEC2を指定する
+$ssmArgs = @('--profile', 'provider', '--region', 'ap-southeast-2', '--command-id', 'YOUR_COMMAND_ID', '--no-cli-pager')
+$instanceIds = @('YOUR_AZ1_INSTANCE_ID', 'YOUR_AZ2_INSTANCE_ID')
+
+foreach ($instanceId in $instanceIds) {
+    # 実行の成功状態と実行日時を取得する
+    aws ssm get-command-invocation @ssmArgs --instance-id $instanceId --query '[Status,ExecutionStartDateTime]' --output text
+    # 保存された出力の先頭12行を取得する
+    aws ssm get-command-invocation @ssmArgs --instance-id $instanceId --query StandardOutputContent --output text | Select-Object -First 12
+}
 ```
 
-```text:AZ2の起動確認結果
-status: done
-active
-active
-enabled
-enabled
-NRestarts=0
-ExecMainStatus=0
-FragmentPath=/etc/systemd/system/aws-kinesis-agent.service
-```
+![AWS CLIで両EC2のSSM実行履歴を取得したターミナルの実画面](/images/squid-agent/ssm-history-terminal.png)
+*2026年11月16日に、AWS CLIのget-command-invocationで検証時のSSM実行履歴を取得し、実際のWindows Terminalを撮影しました。AZ1・AZ2の成功状態、実行日時、サービス状態とパッケージを確認できます。画像の`@ssm`は共通引数、`$az1`・`$az2`は各EC2 IDです。出力は先頭12行の抜粋です。2026年11月15日の検証時の記録を取得した画面です。*
 
 `active`の2行はSquidとKinesis Agentの稼働、`enabled`の2行は両サービスの自動起動を示します。`FragmentPath`からネイティブunitが読み込まれていることも確認しました。
-
-```text:両EC2で確認したパッケージ
-squid-6.13-1.amzn2023.0.7.x86_64
-aws-kinesis-agent-2.0.14-1.amzn2023.noarch
-```
 
 UserDataは`/etc/aws-kinesis/agent.json`とsystemd unitを作り、自動起動を有効にします。Kinesis AgentにはSquidログを読むグループ権限を付け、新しく作られるログも`0640 squid:squid`で読めるようにしました。
 
@@ -571,33 +560,27 @@ python logging/verify_logs.py --snapshot final
 
 Squidログの内容は可変なので、同じアクセス数・条件でも入力バイト数は一定ではありません。表では実際のバイト数も並べています。蓄積後の結果を、そのまま低頻度のリアルタイム収集の削減率として扱うことはできません。
 
-蓄積後の51,200 B設定について、CloudWatch APIで取得した実応答のデータポイントです。
+蓄積後の51,200 B設定について、検証区間のメトリクスを取得するコマンドです。ストリーム名は自分の環境の値に置き換えます。
+
+```powershell
+# 対象ストリーム、検証区間（UTC）、60秒単位のSumを指定する
+$streamName = 'YOUR_STREAM_NAME'
+$cw = @(
+    '--profile', 'provider', '--region', 'ap-southeast-2',
+    '--namespace', 'AWS/Firehose',
+    '--dimensions', "Name=DeliveryStreamName,Value=$streamName",
+    '--start-time', '2026-11-15T09:49:00Z',
+    '--end-time', '2026-11-15T09:53:00Z',
+    '--period', '60', '--statistics', 'Sum', '--no-cli-pager'
+)
+
+# 受信レコード数と受信バイト数を取得する
+aws cloudwatch get-metric-statistics @cw --metric-name IncomingRecords --query Datapoints --output json
+aws cloudwatch get-metric-statistics @cw --metric-name IncomingBytes --query Datapoints --output json
+```
 
 ![AWS CLIで検証区間のCloudWatchメトリクスを取得したターミナルの実画面](/images/squid-agent/cloudwatch-cli-terminal.png)
 *実際のWindows Terminalで、CloudWatchのget-metric-statisticsを実行して撮影しました。2026年11月15日09:49〜09:53 UTCの検証区間を指定し、IncomingRecordsのSumが2、IncomingBytesのSumが22,300 Bであることを再取得しています。検証時のメトリクスを後から取得した画面です。*
-
-```json:CloudWatchの取得結果（抜粋）
-{
-  "IncomingRecords": {
-    "Datapoints": [
-      {
-        "Timestamp": "2026-11-15 18:51:00+09:00",
-        "Sum": 2.0,
-        "Unit": "Count"
-      }
-    ]
-  },
-  "IncomingBytes": {
-    "Datapoints": [
-      {
-        "Timestamp": "2026-11-15 18:51:00+09:00",
-        "Sum": 22300.0,
-        "Unit": "Bytes"
-      }
-    ]
-  }
-}
-```
 
 各計測区間の`IncomingBytes`と`IncomingRecords`はSumで取得し、Kinesis Agentが成功応答を記録したレコード数・バイト数、EC2/S3の原本と照合しました。前方式の未送信レコードが次の方式に混ざらないよう、区間を分けています。
 
