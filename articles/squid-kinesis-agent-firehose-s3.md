@@ -182,6 +182,9 @@ sudo systemctl status aws-kinesis-agent --no-pager
 
 構築直後にSSMで実行した確認コマンドです。以下の出力は2026年11月15日の検証時に保存したものです。
 
+![AWS CLIで両EC2のSSM実行履歴を取得したターミナルの実画面](/images/squid-agent/ssm-history-terminal.png)
+*2026年11月16日に、AWS CLIのget-command-invocationで検証時のSSM実行履歴を取得し、実際のWindows Terminalを撮影しました。AZ1・AZ2の成功状態、実行日時、サービス状態とパッケージを確認できます。`@ssm`はプロファイル・リージョン・コマンドIDの共通引数、`$az1`・`$az2`は各EC2 IDです。出力は先頭12行の抜粋です。EC2上でこれらの確認コマンドを再実行した画面ではありません。*
+
 ```bash
 cloud-init status --wait
 systemctl is-active squid aws-kinesis-agent
@@ -569,6 +572,9 @@ python logging/verify_logs.py --snapshot final
 Squidログの内容は可変なので、同じアクセス数・条件でも入力バイト数は一定ではありません。表では実際のバイト数も並べています。蓄積後の結果を、そのまま低頻度のリアルタイム収集の削減率として扱うことはできません。
 
 蓄積後の51,200 B設定について、CloudWatch APIで取得した実応答のデータポイントです。
+
+![AWS CLIで検証区間のCloudWatchメトリクスを取得したターミナルの実画面](/images/squid-agent/cloudwatch-cli-terminal.png)
+*実際のWindows Terminalで、CloudWatchのget-metric-statisticsを実行して撮影しました。2026年11月15日09:49〜09:53 UTCの検証区間を指定し、IncomingRecordsのSumが2、IncomingBytesのSumが22,300 Bであることを再取得しています。検証時のメトリクスを後から取得した画面です。*
 
 ```json:CloudWatchの取得結果（抜粋）
 {
