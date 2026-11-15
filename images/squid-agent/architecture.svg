@@ -95,7 +95,7 @@
 <text x="2485" y="940" font-size="23" fill="#536982" font-weight="400" text-anchor="middle">接続先はSquidで制限</text>
 <path d="M2135 670 H2320" fill="none" stroke="#087f80" stroke-width="4" stroke-linejoin="round" marker-end="url(#green)"/>
 <path d="M2135 965 H2320" fill="none" stroke="#087f80" stroke-width="4" stroke-linejoin="round" marker-end="url(#green)"/>
-<text x="1335" y="1150" font-size="25" fill="#087f80" font-weight="400" text-anchor="middle">同じ2台のEC2内でSquidとAgentを実行</text>
+<text x="1335" y="1150" font-size="25" fill="#087f80" font-weight="400" text-anchor="middle">同じ2台のEC2内でSquidとKinesis Agentを実行</text>
 <text x="450" y="1150" font-size="25" fill="#7043b8" font-weight="400" text-anchor="middle">1つのEndpointにENIを2つ作成</text>
 <rect x="75" y="1205" width="750" height="400" rx="17" stroke="#c5b4df" stroke-width="2" fill="white"/>
 <text x="100" y="1258" font-size="31" fill="#7043b8" font-weight="700" text-anchor="start">接続制御と共通設定</text>
