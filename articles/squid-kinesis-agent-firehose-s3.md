@@ -64,10 +64,6 @@ Kinesis AgentのCloudWatch独自メトリクスは`cloudwatch.emitMetrics: false
 
 https://github.com/kkoch5t2/aws-privatelink-proxy/tree/feat/squid-kinesis-agent-logging/logging
 
-:::message
-初回構築ではKinesis Agentパッケージの旧式のサービス登録方式で起動が止まりました。EC2を保持したままSSMでネイティブのsystemd unitを設定し、未作成の接続リソースは`01b-existing-provider-link.json`で補完しています。配布する拡張版UserDataには修正を取り込んでいますが、修正後テンプレートによる環境全体の新規作成を追加で繰り返したわけではありません。実際に使ったスタックと補完手順はREADME・証跡に記録しています。
-:::
-
 操作例ではA側のAWSプロファイルを`provider`、B側を`consumer`としています。各作成の間に状態を確認し、先行するスタックが完成してから次へ進みます。保持環境で使った補完スタックの指定はREADMEを参照してください。
 
 ```powershell
@@ -89,6 +85,28 @@ python logging/labctl.py consumer
 # B側Endpointの接続要求をA側で承認する
 python logging/labctl.py accept
 ```
+
+### 修正版テンプレートで新規構築を確認する
+
+2026年11月15日、配布する3つのテンプレートを変更せず、既存環境とは別名のスタックで環境全体を新規作成しました。Endpointの接続承認は通常の手順として実施し、SSMによる設定修正や`01b-existing-provider-link.json`による補完は行っていません。
+
+| アカウント | スタック | 結果 |
+|---|---|---|
+| A | `squidfresh-store`（S3・Firehose） | `CREATE_COMPLETE` |
+| A | `squidfresh-a`（Squid・Kinesis Agent・NLBなど） | `CREATE_COMPLETE` |
+| B | `squidfresh-b`（Endpoint・Lambdaなど） | `CREATE_COMPLETE` |
+
+![新規作成したA側の2スタックが完了したCloudFormation画面](/images/squid-agent/clean-deploy-cloudformation.png)
+*A側のログ保存先とプロキシ構成が、いずれも`CREATE_COMPLETE`になった実画面です。*
+
+2台のEC2は、UserDataだけでSquidとKinesis Agentの導入・設定・自動起動まで完了しました。読み取り確認では、両サービスが`active`・`enabled`、Kinesis Agentの再起動回数が0であることを確認しています。
+
+さらに、B側のLambdaから各AZへ3回ずつ、計6回の実通信を行い、すべてHTTP 200で成功しました。生成されたSquidログはEC2・S3とも**6行・1,134 B**で一致し、欠損・余分な行は0、6件のリクエストIDもすべて1回ずつ到着しています。
+
+![新規構築した3スタック・サービス起動・S3ログ照合の確認結果](/images/squid-agent/clean-deploy-verification.png)
+*今回の新規構築で取得したAWS API応答とSSMの読み取り結果をNAB7で表示した画面です。初回の802行の集約比較とは別の、追加検証の結果です。*
+
+初回構築時の修復・補完の経緯はREADMEに残しています。以下の集約比較と継続収集の実測値には、初回検証の原本を使用しています。
 
 ### AL2023へのKinesis Agent導入とサービス管理
 
@@ -309,7 +327,7 @@ sudo tail -n 30 /var/log/aws-kinesis-agent/aws-kinesis-agent.log
 
 今回の結果だけで、異常終了や応答喪失を含むすべての条件で重複が発生しないとは説明できません。収集位置の記録、送信の再試行、S3到着データを合わせて確認し、必要なら下流でリクエストIDなどによる重複排除を設計します。
 
-検証環境とログは確認のため保持しています。S3にライフサイクル削除は設定せず、EC2のログやKinesis Agentログも自動期限切れにしていません。環境を保持する間は、EC2・NLB・Endpointなどの課金が続きます。
+検証環境とログは確認のため保持しています。検証後は、初回環境と新規構築確認用のEC2をすべて停止しました。S3にライフサイクル削除は設定せず、EC2のログやKinesis Agentログも保持しています。NLB・VPC Endpoint・EBS・S3など、停止後も残るリソースの課金は続きます。
 
 
 **参考資料**
