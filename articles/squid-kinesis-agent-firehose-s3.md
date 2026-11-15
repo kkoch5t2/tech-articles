@@ -24,8 +24,8 @@ https://zenn.dev/kkoch5t2/articles/firehose-direct-put-cost
 
 追加するのは、各Squid EC2からS3までのログ経路です。A側VPCの2AZにFirehose用Interface VPC EndpointのENIを配置し、2台のKinesis Agentから共通のFirehoseストリームへ送ります。保存先のS3バケットも共通です。
 
-![通信経路とログ収集経路を分けた構成図](/images/squid-agent/architecture.png)
-*検証構成の再現図です。既存のプロキシ通信を実線、今回追加したログ経路をオレンジの破線で示しています。SquidとKinesis Agentは同じEC2内で動かします。*
+![通信経路とログ収集経路を分けた構成図](/images/squid-agent/architecture-overview.png)
+*上段はプロキシ通信、下段は追加したログ収集の経路です。上下に描いているのは同じ2台のEC2で、SquidとKinesis Agentを同居させています。*
 
 ログ送信は **Kinesis Agent → Firehose用Interface Endpoint → Firehose → S3** です。Kinesis AgentからFirehoseへの通信には、EC2の公開IPv4やInternet Gatewayを使いません。
 
