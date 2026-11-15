@@ -50,6 +50,41 @@ EC2×2、NLB、B側EndpointとFirehose用Endpointの各2AZ分、公開IPv4×2、
 
 Firehose用Endpointの固定料金は、シドニーでは1AZあたり$0.013/時、2AZで$0.026/時です。これとは別にEndpointのデータ処理料金も発生します。
 
+
+料金は「作っている間にかかる固定部分」と「送信・保存した量に応じた部分」に分けて確認します。以下は、修正版の検証環境1組を稼働させる場合の内訳です。新旧環境を同時に残した場合は、それぞれの料金が発生します。
+
+| 固定部分 | 単価・数量 | 1時間あたりの概算 |
+|---|---|---:|
+| EC2 | t3.micro $0.0132 × 2台 | $0.0264 |
+| NLB | $0.0252 × 1台 | $0.0252 |
+| プロキシ用Endpoint | $0.013 × 2AZ | $0.0260 |
+| Firehose用Endpoint | $0.013 × 2AZ | $0.0260 |
+| 公開IPv4 | $0.005 × 2個 | $0.0100 |
+| EBS | gp3 $0.096/GB月 × 16GB ÷ 730時間 | 約$0.0021 |
+| 合計 | 1か月730時間としてEBSを時間換算 | 約$0.1157 |
+
+**EC2を停止しても、Endpoint・NLB・EBSの料金は残ります。** Firehose用Endpointの2AZ分だけなら$0.026 × 24時間＝$0.624/日です。Endpointはログを送っていない時間も課金されます。
+
+次は、AWS Price List APIからシドニーのPrivateLink単価を取得した実画面です。Pricing APIの取得先は`us-east-1`ですが、`location`でシドニーを指定しています。実際の請求額を表示した画面ではありません。
+
+```powershell
+$priceArgs=@('--profile','medallion-lab','--region','us-east-1','--no-cli-pager')
+```
+
+**実行したコマンド（Windows / PowerShell）**
+
+```powershell
+$products=aws pricing get-products @priceArgs --service-code AmazonVPC --filters 'Type=TERM_MATCH,Field=location,Value=Asia Pacific (Sydney)' 'Type=TERM_MATCH,Field=group,Value=VPCE:VpcEndpoint' --query PriceList --output json | ConvertFrom-Json
+$products | ForEach-Object { $p=$_ | ConvertFrom-Json; $p.terms.OnDemand.PSObject.Properties.Value.priceDimensions.PSObject.Properties.Value | Select-Object @{n='Usage';e={$p.product.attributes.usagetype}},unit,@{n='USD';e={$_.pricePerUnit.USD}},beginRange,endRange } | Format-Table -AutoSize
+```
+
+![AWSの料金APIで取得したシドニーのEndpoint単価](/images/squid-agent/privatelink-pricing-terminal.png)
+*2026年11月16日にAWS CLIで料金APIを取得した実ターミナル画面。VpcEndpoint-HoursのHrsが1AZ・1時間分、VpcEndpoint-BytesのGBが処理量の単位です。beginRange・endRangeは処理量の料金段階を表します。*
+
+画像にある`GWLBE`の行はGateway Load Balancer Endpoint用で、今回のInterface Endpointの単価には使いません。画像の`VpcEndpoint-Hours`は$0.013/時です。`VpcEndpoint-Bytes`は最初の1PB/月まで$0.01/GBで、超過分には別の段階単価が適用されます。今回の小規模検証では最初の段階を参照します。これにFirehoseの取り込み、S3保存・PUT、NLBのNLCUなどが別途加わります。
+
+Firehoseの取り込み料金に使う量は、後半の「料金は入力レコードごとの切り上げで計算する」で、今回の実測を使って説明します。バッファ時間を延ばしてS3ファイルを減らすことと、Firehose入力レコードの課金量を減らすことは別です。
+
 Kinesis AgentのCloudWatch独自メトリクスは`cloudwatch.emitMetrics: false`で無効にし、比較にはFirehose標準メトリクスを使います。
 
 ## CloudFormationでログ収集環境を構築する
@@ -162,6 +197,49 @@ Private DNSを有効にすると、EC2内で`firehose.ap-southeast-2.amazonaws.c
 
 このロールのFirehose送信権限はEndpoint経由に限定しています。Private DNSの設定が崩れて公開APIへ向かった場合も、送信権限が成立しない構成です。
 
+
+以下の設定確認は、リソース削除前にWindowsのAWS CLIで行いました。共通引数と対象リソースを先に設定します。値は自分の環境に置き換えてください。
+
+```powershell
+$awsA=@('--profile','medallion-lab','--region','ap-southeast-2','--no-cli-pager')
+$endpointId='YOUR_FIREHOSE_ENDPOINT_ID'
+$endpointSg='YOUR_FIREHOSE_ENDPOINT_SECURITY_GROUP_ID'
+$agentRole='YOUR_EC2_ROLE_NAME'
+$agentPolicy='YOUR_EC2_INLINE_POLICY_NAME'
+```
+
+**実行したコマンド（Windows / PowerShell）**
+
+```powershell
+aws ec2 describe-vpc-endpoints @awsA --vpc-endpoint-ids $endpointId --query 'VpcEndpoints[].{Type:VpcEndpointType,Service:ServiceName,PrivateDNS:PrivateDnsEnabled,State:State,SubnetCount:length(SubnetIds)}' --output table
+aws ec2 describe-security-groups @awsA --group-ids $endpointSg --query 'SecurityGroups[].IpPermissions[].{Protocol:IpProtocol,FromPort:FromPort,ToPort:ToPort,SourceSG:UserIdGroupPairs[].GroupId,CIDRs:IpRanges[].CidrIp}' --output json
+```
+
+![EndpointのPrivate DNSとセキュリティグループの実設定](/images/squid-agent/endpoint-security-settings-terminal.png)
+*削除前にAWSから取得した実画面。上段はInterface・PrivateDNS=True・2サブネット、下段はTCP 443の許可です。SourceSGにSquid EC2のSGを指定し、CIDRsに0.0.0.0/0を指定していないことを確認します。*
+
+次はEndpointポリシーです。`Action`が`firehose:PutRecordBatch`、`Resource`が対象ストリーム、`Condition`の`aws:PrincipalArn`がEC2のロールに絞られていることを確認します。表示時に12桁のアカウントIDを`[ACCOUNT]`へ置き換えています。
+
+**実行したコマンド（Windows / PowerShell）**
+
+```powershell
+aws ec2 describe-vpc-endpoints @awsA --vpc-endpoint-ids $endpointId --query 'VpcEndpoints[0].PolicyDocument' --output text | ForEach-Object { $_ -replace '\b\d{12}\b','[ACCOUNT]' } | ConvertFrom-Json | ConvertTo-Json -Depth 12
+```
+
+![Firehose用Endpointポリシーの実設定](/images/squid-agent/endpoint-policy-settings-terminal.png)
+*AWS CLIで実際に取得したEndpointポリシー。アカウントIDのみ表示時にマスクしています。*
+
+EC2ロール側でも、送信権限の`Condition`に`aws:SourceVpce`を指定します。Endpointを通った要求であることを条件にしており、同じロールを使った公開経路からの送信を許可する設定にはしていません。
+
+**実行したコマンド（Windows / PowerShell）**
+
+```powershell
+aws iam get-role-policy @awsA --role-name $agentRole --policy-name $agentPolicy --query PolicyDocument --output json | ForEach-Object { $_ -replace '\b\d{12}\b','[ACCOUNT]' }
+```
+
+![EC2ロールに設定した送信権限とSourceVpce条件](/images/squid-agent/role-policy-settings-terminal.png)
+*削除前にAWSから取得したインラインポリシー。対象ストリームへのPutRecordBatchにaws:SourceVpce条件が付いていることを確認します。アカウントIDは表示時にマスクしています。*
+
 ### Amazon Linux 2023へのKinesis Agent導入とサービス管理
 
 ![Amazon Linux 2023でのKinesis Agent導入とsystemdによるサービス管理](/images/squid-agent/amazon-linux-agent-service.png)
@@ -208,7 +286,7 @@ $az1='YOUR_AZ1_INSTANCE_ID'
 $az2='YOUR_AZ2_INSTANCE_ID'
 ```
 
-**画像で実行したコマンド（Windows / PowerShell）**
+**実行したコマンド（Windows / PowerShell）**
 
 ```powershell
 aws ssm get-command-invocation @ssm --instance-id $az1 --query "[Status,ExecutionStartDateTime]" --output text
@@ -232,7 +310,7 @@ unitファイルから、実行ユーザー、squidグループへの追加、Co
 sudo cat /etc/systemd/system/aws-kinesis-agent.service
 ```
 
-**画像で実行したコマンド（Windows / PowerShell）**
+**実行したコマンド（Windows / PowerShell）**
 
 ```powershell
 $unitOutput = aws ssm get-command-invocation @ssm --instance-id $az1 --query StandardOutputContent --output text
@@ -252,7 +330,7 @@ $unitOutput = aws ssm get-command-invocation @ssm --instance-id $az1 --query Sta
 sudo ls -l /var/log/squid /var/lib/aws-kinesis-agent
 ```
 
-**画像で実行したコマンド（Windows / PowerShell）**
+**実行したコマンド（Windows / PowerShell）**
 
 ```powershell
 aws ssm get-command-invocation @ssm --instance-id $az1 --query StandardOutputContent --output text | Select-Object -Last 10
@@ -295,6 +373,38 @@ Firehose側はS3向けのバッファを60秒・5MiBとし、圧縮、データ�
 
 ## Squid経由で通信してアクセスログを生成する
 
+
+### FirehoseとS3の設定を実画面で確認する
+
+次の2つは、CloudFormationが作成した実リソースの設定です。FirehoseはDirect PUTで受け取り、S3へは60秒・5MiBを目安に配信します。これはFirehoseが受け取った後のバッファで、EC2上で複数行をまとめる設定とは異なります。
+
+```powershell
+$stream='YOUR_FIREHOSE_STREAM_NAME'
+$bucket='YOUR_BUCKET_NAME'
+```
+
+**実行したコマンド（Windows / PowerShell）**
+
+```powershell
+aws firehose describe-delivery-stream @awsA --delivery-stream-name $stream --query 'DeliveryStreamDescription.{Input:DeliveryStreamType,State:DeliveryStreamStatus,S3:Destinations[].ExtendedS3DestinationDescription.{Prefix:Prefix,Buffer:BufferingHints,Compression:CompressionFormat}}' --output json
+```
+
+![Firehoseの入力方式・S3バッファ・保存プレフィックス](/images/squid-agent/firehose-buffer-settings-terminal.png)
+*削除前にdescribe-delivery-streamを実行した実画面。Input=DirectPut、IntervalInSeconds=60、SizeInMBs=5、Compression=UNCOMPRESSEDを確認します。PrefixはS3内の保存先の階層です。*
+
+S3は公開アクセスのブロック4項目がすべて`true`、デフォルト暗号化が`AES256`、バージョニングが`Enabled`であることを確認します。公開を防ぎ、暗号化して保存し、同じキーを上書きした場合も旧バージョンを保持する設定です。
+
+**実行したコマンド（Windows / PowerShell）**
+
+```powershell
+aws s3api get-public-access-block @awsA --bucket $bucket --output json
+aws s3api get-bucket-encryption @awsA --bucket $bucket --query 'ServerSideEncryptionConfiguration.Rules[].ApplyServerSideEncryptionByDefault' --output json
+aws s3api get-bucket-versioning @awsA --bucket $bucket --output json
+```
+
+![S3の公開アクセス遮断・暗号化・バージョニング](/images/squid-agent/s3-security-settings-terminal.png)
+*AWS CLIで取得したS3の実設定。上から公開アクセスのブロック、バケットのデフォルト暗号化、バージョニングの順です。*
+
 ### 両方のEC2を通ることを確認する
 
 NLBの両ターゲットが`healthy`、B側Endpointが`available`であることを確認してから、LambdaでHTTPS通信を発生させます。今回のテスト用LambdaはEndpointのAZ別DNS名を選択できるため、各AZのSquidを個別に通して確認しました。
@@ -327,7 +437,7 @@ python logging/labctl.py generate --route az2 --count 3 --run smoke-az2
 $proof='C:\PATH\TO\SAVED_EVIDENCE'
 ```
 
-**画像で実行したコマンド（Windows / PowerShell）**
+**実行したコマンド（Windows / PowerShell）**
 
 ```powershell
 (Get-Content "$proof\readiness.json" -Raw | ConvertFrom-Json).targets.TargetHealthDescriptions | Select-Object @{n='EC2';e={if($_.Target.Id -eq $az1){'AZ1'}else{'AZ2'}}},@{n='Port';e={$_.Target.Port}},@{n='State';e={$_.TargetHealth.State}} | Format-Table
@@ -355,7 +465,7 @@ $proof='C:\PATH\TO\SAVED_EVIDENCE'
 
 前のLambda応答画面と、次のS3ログ画面で、同じリクエストIDを照合します。
 
-S3のオブジェクト一覧と、初回疎通のログを取得します。画像で実行したコマンドには、表示するIPとEC2 IDをマスクする処理も含めています。
+S3のオブジェクト一覧と、初回疎通のログを取得します。実行したコマンドには、表示するIPとEC2 IDをマスクする処理も含めています。
 
 バケット名とオブジェクトのキーを設定します。検索するリクエストIDも、対象の検証に合わせてください。
 
@@ -364,7 +474,7 @@ $bucket='YOUR_BUCKET_NAME'
 $s3Uri='s3://YOUR_BUCKET_NAME/YOUR_OBJECT_KEY'
 ```
 
-**画像で実行したコマンド（Windows / PowerShell）**
+**実行したコマンド（Windows / PowerShell）**
 
 ```powershell
 aws s3api list-objects-v2 @awsA --bucket $bucket --prefix squid/ --query 'Contents[:3].{Key:Key,Size:Size}' --output table
@@ -403,7 +513,7 @@ $eniIds=@('YOUR_ENDPOINT_ENI_1_ID','YOUR_ENDPOINT_ENI_2_ID')
 $dnsId='YOUR_DNS_CHECK_SSM_COMMAND_ID'
 ```
 
-**画像で実行したコマンド（Windows / PowerShell）**
+**実行したコマンド（Windows / PowerShell）**
 
 ```powershell
 aws ec2 describe-vpc-endpoints @awsA --vpc-endpoint-ids $endpointId --query 'VpcEndpoints[].{State:State,PrivateDnsEnabled:PrivateDnsEnabled}' --output table
@@ -489,7 +599,7 @@ Squidログの内容は可変なので、同じアクセス数・条件でも入
 
 蓄積後の51,200 B設定について、検証区間のメトリクスを取得します。画像内と同じプロファイル名・ストリーム名・期間を示します。自分の環境で実行する場合は、それぞれの値を置き換えてください。
 
-**画像で実行したコマンド（Windows / PowerShell）**
+**実行したコマンド（Windows / PowerShell）**
 
 ```powershell
 $cw=@('--profile','medallion-lab','--region','ap-southeast-2','--namespace','AWS/Firehose','--dimensions','Name=DeliveryStreamName,Value=squidvpce-store-squid','--start-time','2026-11-15T09:49:00Z','--end-time','2026-11-15T09:53:00Z','--period','60','--statistics','Sum','--no-cli-pager')
@@ -543,7 +653,7 @@ sudo ls -li /var/log/squid/access.log*
 $rotateId='YOUR_ROTATION_SSM_COMMAND_ID'
 ```
 
-**画像で実行したコマンド（Windows / PowerShell）**
+**実行したコマンド（Windows / PowerShell）**
 
 ```powershell
 aws ssm get-command-invocation @awsA --command-id $rotateId --instance-id $az1 --query StandardOutputContent --output text
@@ -574,7 +684,7 @@ sudo tail -n 30 /var/log/aws-kinesis-agent/aws-kinesis-agent.log
 $restartId='YOUR_RESTART_SSM_COMMAND_ID'
 ```
 
-**画像で実行したコマンド（Windows / PowerShell）**
+**実行したコマンド（Windows / PowerShell）**
 
 ```powershell
 aws ssm get-command-invocation @awsA --command-id $restartId --instance-id $az1 --query "[Status,ExecutionStartDateTime,StandardOutputContent]" --output text
@@ -612,7 +722,7 @@ sudo grep -E 'Connection refused|Retriable send error' /var/log/aws-kinesis-agen
 $failureId='YOUR_FAILURE_OBSERVATION_SSM_COMMAND_ID'
 ```
 
-**画像で実行したコマンド（Windows / PowerShell）**
+**実行したコマンド（Windows / PowerShell）**
 
 ```powershell
 aws ssm get-command-invocation @awsA --command-id $failureId --instance-id $az1 --query StandardOutputContent --output text | Select-Object -First 1
