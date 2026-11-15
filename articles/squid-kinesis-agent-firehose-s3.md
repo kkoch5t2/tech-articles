@@ -126,7 +126,7 @@ UserDataは`/etc/aws-kinesis/agent.json`とsystemd unitを作り、自動起動�
 `initialPosition`は、チェックポイントがないファイルを最初に読む位置です。既存のチェックポイントがある場合の継続位置とは分けて考えます。
 
 ![EC2から取得した初期Kinesis Agent設定の画面](/images/squid-agent/agent-config-initial.png)
-*EC2から取得した実際の初期設定をNAB7のエディタで表示した画面。集約は0から比較を開始しています。*
+*EC2から取得した実際の初期設定をテキストエディタで表示した画面。集約は0から比較を開始しています。*
 
 Firehose側はS3向けのバッファを60秒・5MiBとし、圧縮、データ変換、動的パーティショニング、区切り文字の追加は無効にしています。改行はSquidログに含まれるものをそのまま送ります。
 
@@ -160,7 +160,7 @@ python logging/labctl.py generate --route az2 --count 3 --run smoke-az2
 Squidのログフォーマットに`source=az1/az2`、EC2のインスタンスID、検証用のリクエストIDを追加しました。
 
 ![S3へ到着した両EC2の実際のSquidログ](/images/squid-agent/s3-log-content-capture.png)
-*保存済みのS3ログ原本から、AZ1・AZ2の実ログを1行ずつNAB7で表示して撮影しました。IPアドレスとEC2 IDをマスクし、読みやすく折り返しています。架空ログや再送データではありません。*
+*保存済みのS3ログ原本から、AZ1・AZ2の実ログを1行ずつ表示して撮影しました。IPアドレスとEC2 IDをマスクし、読みやすく折り返しています。架空ログや再送データではありません。*
 
 HTTPSのURLパスはCONNECTの中のTLS通信に含まれ、Squidには見えません。検証用IDはCONNECT時の`X-Lab-Request`ヘッダーに入れ、Squidの`%{X-Lab-Request}>h`で記録しています。
 
@@ -197,7 +197,7 @@ python logging/verify_logs.py --snapshot final
 | 送信元 | AZ1・AZ2とも401行 |
 
 ![EC2原本とS3原本の再照合結果](/images/squid-agent/verification-final-capture.png)
-*保存済みのEC2・S3ログ原本をNAB7で再照合した結果画面です。802行・147,591 Bの一致、欠損・余分な行0、成功ID785件を確認しています。この照合で追加通信は発生させていません。*
+*保存済みのEC2・S3ログ原本を再照合した結果画面です。802行・147,591 Bの一致、欠損・余分な行0、成功ID785件を確認しています。この照合で追加通信は発生させていません。*
 
 全802行には、CONNECTに収集対象を絞る前のヘルスチェック17行も含まれます。これらも原本として保持し、集約比較の表には混ぜていません。
 
@@ -234,7 +234,7 @@ python logging/verify_logs.py --snapshot final
 | 蓄積後に開始 | 51,200 B | 120 | 2 | 22,060 B | 11,030.0 B |
 
 ![6条件のCloudWatch Sum・Kinesis Agent送信成功・EC2原本の比較画面](/images/squid-agent/comparison-sums-capture.png)
-*初回検証時のCloudWatch API応答とKinesis Agent送信成功記録・EC2原本の照合結果を、NAB7で表示して撮影しました。`l`は通常追記、`b`は蓄積後の開始です。画面下部は51,200 B設定の保存済みAPI応答から、時刻・Sum・単位を抜粋しています。*
+*初回検証時のCloudWatch API応答とKinesis Agent送信成功記録・EC2原本の照合結果を表示して撮影しました。`l`は通常追記、`b`は蓄積後の開始です。画面下部は51,200 B設定の保存済みAPI応答から、時刻・Sum・単位を抜粋しています。*
 
 
 通常の追記では、集約サイズを5,120 B、51,200 Bにしても120レコードのままでした。今回の追記間隔と100msのポーリングでは、読み込む範囲に1行ずつ現れるためです。送信バッファに60秒保持する動作が、その後の行との再集約を行うわけではありません。
@@ -301,7 +301,7 @@ sudo tail -n 30 /var/log/aws-kinesis-agent/aws-kinesis-agent.log
 両EC2で`Connection refused`と`Retriable send error ... Will retry`を確認しました。送信できない間に生成した10件と、元の設定へ戻してKinesis Agentを再起動した後の10件は、全20件がS3へ1回ずつ到着しています。復旧時にもチェックポイントは削除していません。
 
 ![ローテーション・再起動・一時送信失敗の照合結果と実エラーログ](/images/squid-agent/continuity-capture.png)
-*保存済みの送信記録とS3原本を照合し、各20件が1回ずつ到着したことを確認した画面です。下部は初回検証で両EC2に残った実エラーログの抜粋です。保存済み証跡をNAB7で表示して撮影しており、障害を再発生させた画像ではありません。*
+*保存済みの送信記録とS3原本を照合し、各20件が1回ずつ到着したことを確認した画面です。下部は初回検証で両EC2に残った実エラーログの抜粋です。保存済み証跡を表示して撮影しており、障害を再発生させた画像ではありません。*
 
 今回の結果だけで、異常終了や応答喪失を含むすべての条件で重複が発生しないとは説明できません。収集位置の記録、送信の再試行、S3到着データを合わせて確認し、必要なら下流でリクエストIDなどによる重複排除を設計します。
 
