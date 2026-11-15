@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1040" viewBox="0 0 1800 1040">
+<defs><marker id="b" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M1 1L8 4.5L1 8Z" fill="#2C68B2"/></marker><marker id="o" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M1 1L8 4.5L1 8Z" fill="#C96B16"/></marker></defs>
+<rect width="1800" height="1040" fill="white"/>
+<g font-family="Noto Sans CJK JP,Yu Gothic,sans-serif">
+<text x="55" y="65" font-size="38" fill="#18324D" font-weight="700" text-anchor="start">Firehoseへの送信をPrivateLinkに限定する</text>
+<text x="55" y="110" font-size="22" fill="#60758A" font-weight="400" text-anchor="start">EC2からFirehoseまでの接続と、3か所のアクセス制御</text>
+<rect x="55" y="155" width="1690" height="515" rx="12" fill="#F7FBF9" stroke="#AED5CC" stroke-width="2"/>
+<text x="80" y="195" font-size="27" fill="#238576" font-weight="700" text-anchor="start">アカウントA</text>
+<rect x="80" y="225" width="1090" height="410" rx="12" fill="#FFFFFF" stroke="#B9D9D2" stroke-width="2"/>
+<text x="105" y="264" font-size="25" fill="#238576" font-weight="700" text-anchor="start">VPC</text>
+<text x="105" y="306" font-size="21" fill="#60758A" font-weight="400" text-anchor="start">Private DNS：通常のFirehoseサービス名 → Endpoint ENIのプライベートIP</text>
+<rect x="120" y="360" width="300" height="160" rx="12" fill="#F4F9F7" stroke="#238576" stroke-width="2"/>
+<text x="270" y="406" font-size="28" fill="#238576" font-weight="700" text-anchor="middle">Squid EC2 ×2</text>
+<text x="270" y="446" font-size="26" fill="#C96B16" font-weight="700" text-anchor="middle">Kinesis Agent</text>
+<text x="270" y="485" font-size="21" fill="#60758A" font-weight="400" text-anchor="middle">2AZに1台ずつ</text>
+<rect x="620" y="360" width="480" height="160" rx="12" fill="#FFF8EE" stroke="#C96B16" stroke-width="2"/>
+<text x="860" y="405" font-size="25" fill="#C96B16" font-weight="700" text-anchor="middle">Firehose用Interface Endpoint ×1</text>
+<text x="860" y="447" font-size="22" fill="#18324D" font-weight="400" text-anchor="middle">ENI #1（AZ1） / ENI #2（AZ2）</text>
+<text x="860" y="485" font-size="21" fill="#60758A" font-weight="400" text-anchor="middle">プライベートIP / TCP 443</text>
+<path d="M420 440 H620" fill="none" stroke="#C96B16" stroke-width="3.4" stroke-linejoin="round" marker-end="url(#o)"/>
+<text x="520" y="419" font-size="21" fill="#C96B16" font-weight="400" text-anchor="middle">HTTPS / 443</text>
+<rect x="1325" y="360" width="350" height="160" rx="12" fill="#FFF8EE" stroke="#C96B16" stroke-width="2"/>
+<text x="1500" y="408" font-size="27" fill="#C96B16" font-weight="700" text-anchor="middle">Amazon Data</text>
+<text x="1500" y="450" font-size="32" fill="#C96B16" font-weight="700" text-anchor="middle">Firehose</text>
+<text x="1500" y="492" font-size="22" fill="#60758A" font-weight="400" text-anchor="middle">対象ストリーム</text>
+<path d="M1100 440 H1325" fill="none" stroke="#C96B16" stroke-width="3.4" stroke-linejoin="round" marker-end="url(#o)" stroke-dasharray="9 6"/>
+<text x="1220" y="413" font-size="20" fill="#C96B16" font-weight="700" text-anchor="middle">AWS PrivateLink</text>
+<text x="1325" y="565" font-size="22" fill="#60758A" font-weight="400" text-anchor="start">AWSサービス（VPC外）</text>
+<text x="105" y="586" font-size="20" fill="#60758A" font-weight="400" text-anchor="start">firehose.ap-southeast-2.amazonaws.com は、そのまま設定に使用</text>
+<rect x="55" y="725" width="530" height="215" rx="12" fill="#FFF9F2" stroke="#E7CBA8" stroke-width="2"/>
+<text x="80" y="773" font-size="25" fill="#C96B16" font-weight="700" text-anchor="start">① EndpointのSG</text>
+<text x="80" y="825" font-size="23" fill="#18324D" font-weight="400" text-anchor="start">Squid EC2のSGから</text>
+<text x="80" y="867" font-size="23" fill="#18324D" font-weight="400" text-anchor="start">TCP 443だけを許可</text>
+<rect x="635" y="725" width="530" height="215" rx="12" fill="#FFF9F2" stroke="#E7CBA8" stroke-width="2"/>
+<text x="660" y="773" font-size="25" fill="#C96B16" font-weight="700" text-anchor="start">② Endpointポリシー</text>
+<text x="660" y="825" font-size="23" fill="#18324D" font-weight="400" text-anchor="start">EC2ロール・対象ストリームの</text>
+<text x="660" y="867" font-size="23" fill="#18324D" font-weight="400" text-anchor="start">PutRecordBatchだけを許可</text>
+<rect x="1215" y="725" width="530" height="215" rx="12" fill="#FFF9F2" stroke="#E7CBA8" stroke-width="2"/>
+<text x="1240" y="773" font-size="25" fill="#C96B16" font-weight="700" text-anchor="start">③ EC2インスタンスロール</text>
+<text x="1240" y="825" font-size="23" fill="#18324D" font-weight="400" text-anchor="start">aws:SourceVpce を条件にして</text>
+<text x="1240" y="867" font-size="23" fill="#18324D" font-weight="400" text-anchor="start">このEndpoint経由だけを許可</text>
+<text x="55" y="1000" font-size="23" fill="#60758A" font-weight="400" text-anchor="start">Squidの外部接続用IGWとは別の経路。ログ送信はFirehose用Endpointを通す。</text>
+</g></svg>

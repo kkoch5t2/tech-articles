@@ -93,6 +93,9 @@ python logging/labctl.py accept
 
 ### Firehoseへの送信をPrivateLinkに限定する
 
+![EC2からFirehose用Endpointへ送信する経路と3か所のアクセス制御](/images/squid-agent/firehose-privatelink-detail.png)
+*この節専用の構成図です。通常のFirehoseサービス名をPrivate DNSでEndpoint ENIへ解決し、SG・Endpointポリシー・EC2ロールで送信を制御します。*
+
 Firehose用EndpointはA側VPCに作ります。B側からSquidへ接続するためのEndpointとは、配置先も接続先も異なります。
 
 | Endpoint | 配置 | 接続先 | ポート |
@@ -159,14 +162,17 @@ Private DNSを有効にすると、EC2内で`firehose.ap-southeast-2.amazonaws.c
 
 このロールのFirehose送信権限はEndpoint経由に限定しています。Private DNSの設定が崩れて公開APIへ向かった場合も、送信権限が成立しない構成です。
 
-### AL2023へのKinesis Agent導入とサービス管理
+### Amazon Linux 2023へのKinesis Agent導入とサービス管理
+
+![Amazon Linux 2023でのKinesis Agent導入とsystemdによるサービス管理](/images/squid-agent/amazon-linux-agent-service.png)
+*この節専用の構成図です。UserDataでパッケージ・設定・権限を用意し、systemdでSquidとKinesis Agentを管理します。Agentはログを読み取り、収集位置をチェックポイントへ保存します。*
 
 Amazon Kinesis Agentは、EC2上で常駐するJava製のログ収集サービスです。本構成ではKinesis Data Streamsを挟まず、Firehoseへ直接送信します。
 
-AL2023の公式リポジトリにある`aws-kinesis-agent`を使用します。今回のEC2では`2.0.14-1.amzn2023`、Squidは`6.13-1.amzn2023.0.7`でした。JavaはCorretto 17を指定しています。
+Amazon Linux 2023の公式リポジトリにある`aws-kinesis-agent`を使用します。今回のEC2では`2.0.14-1.amzn2023`、Squidは`6.13-1.amzn2023.0.7`でした。JavaはCorretto 17を指定しています。
 
 ```bash
-# AL2023のリポジトリからJavaとKinesis Agentを導入する
+# Amazon Linux 2023のリポジトリからJavaとKinesis Agentを導入する
 sudo dnf -y install java-17-amazon-corretto-headless
 sudo dnf -y install squid aws-kinesis-agent jq
 
@@ -174,9 +180,18 @@ sudo dnf -y install squid aws-kinesis-agent jq
 sudo systemctl status aws-kinesis-agent --no-pager
 ```
 
+![両EC2で確認したサービス状態とパッケージバージョン](/images/squid-agent/ec2-service-state.png)
+*構築直後のSSM応答を表示した画面です。両EC2でSquidとKinesis Agentがactive・enabledであり、ネイティブunitが読み込まれていることを確認しました。検証時に保存した状態です。*
+
 UserDataは`/etc/aws-kinesis/agent.json`とsystemd unitを作り、自動起動を有効にします。Kinesis AgentにはSquidログを読むグループ権限を付け、新しく作られるログも`0640 squid:squid`で読めるようにしました。
 
+![EC2から取得したKinesis Agentのsystemd unit](/images/squid-agent/agent-systemd-unit.png)
+*SSMで取得した実際のunitファイルです。実行ユーザー、squidグループへの追加、Corretto 17の指定、異常終了時の再起動設定を確認できます。*
+
 チェックポイントは再起動後も残る`/var/lib/aws-kinesis-agent/checkpoints`に置きます。収集位置の記録を消して最初から送り直す方法は使いません。
+
+![両EC2のSquidログ権限とチェックポイントファイル](/images/squid-agent/agent-log-permissions.png)
+*構築直後に取得したls -lの出力です。ログの所有者・権限と、Agentユーザーが所有するチェックポイントを確認しています。この時点ではテストアクセス前のためaccess.logは0 Bです。*
 
 ### Kinesis AgentとFirehoseの設定
 
@@ -216,6 +231,9 @@ Firehose側はS3向けのバッファを60秒・5MiBとし、圧縮、データ�
 
 NLBの両ターゲットが`healthy`、B側Endpointが`available`であることを確認してから、LambdaでHTTPS通信を発生させます。今回のテスト用LambdaはEndpointのAZ別DNS名を選択できるため、各AZのSquidを個別に通して確認しました。
 
+![NLBの両ターゲットとB側Endpointの準備状態](/images/squid-agent/proxy-readiness.png)
+*疎通前に保存したAWS API応答の抜粋です。NLBの両EC2がhealthy、B側のプロキシ接続用Endpointがavailableで、ENIが2つあることを確認しました。*
+
 ```powershell
 # AZ1のSquidを通して少量の実通信を行う
 python logging/labctl.py generate --route az1 --count 3 --run smoke-az1
@@ -226,16 +244,30 @@ python logging/labctl.py generate --route az2 --count 3 --run smoke-az2
 
 この管理スクリプトはLambdaの実行と証跡の保存を行います。Firehoseにログを送るのは、EC2上のKinesis Agentです。
 
-### ログに送信元とリクエストIDを残す
-
-Squidのログフォーマットに`source=az1/az2`、EC2のインスタンスID、検証用のリクエストIDを追加しました。
-
-![S3へ到着した両EC2の実際のSquidログ](/images/squid-agent/s3-log-content-capture.png)
-*今回のPrivateLink構成でS3に保存されたログ原本から、AZ1・AZ2の実ログを1行ずつ表示して撮影しました。IPアドレスとEC2 IDをマスクし、読みやすく折り返しています。架空ログや再送データではありません。*
-
-HTTPSのURLパスはCONNECTの中のTLS通信に含まれ、Squidには見えません。検証用IDはCONNECT時の`X-Lab-Request`ヘッダーに入れ、Squidの`%{X-Lab-Request}>h`で記録しています。
+![AZ1・AZ2を指定したLambdaの実行ペイロードと成功応答](/images/squid-agent/both-az-smoke.png)
+*初回疎通で保存した実行ペイロードとLambda応答の抜粋です。各AZで3回ずつすべてHTTP 200となり、送信元パブリックIPもそれぞれのSquid EC2と一致しました。IPはEC2ごとに区別してマスクしています。*
 
 最初の少量疎通では、各AZで3アクセスずつ、計6アクセスがすべてHTTP 200で成功しました。EC2原本とS3原本はともに6行・1,137 Bで一致し、欠損・余分な行は0でした。集約比較は、この疎通確認と計測区間を分けて行います。
+
+### どのEC2の、どのアクセスのログがS3へ届いたかを確認する
+
+2台のSquidのログは同じS3へ集まります。そこで、**「ログを出したEC2」と「テストで発生させた1回のアクセス」**を区別する情報を、Squidのログに追加しました。
+
+| ログの項目 | 意味 | 誰が付けるか |
+|---|---|---|
+| `source=az1` / `source=az2` | ログを書いたSquid EC2の区別。アクセスしたクライアントの意味ではありません | 各EC2のSquidログ設定 |
+| `instance=...` | そのSquid EC2のインスタンスID | UserDataで取得し、Squidログ設定に追加 |
+| `request=...` | テストアクセス1回ごとの識別番号（リクエストID） | テスト用Lambdaが発行 |
+
+たとえば`fresh-20261115-az1-000`は、初回疎通テストでAZ1側を通した最初のアクセスに付けたIDです。この値がLambdaの成功応答とS3ログの両方に残っていれば、**そのアクセスのログがS3まで届いた**と照合できます。
+
+![Lambdaの成功応答とS3ログに残った同じリクエストID](/images/squid-agent/request-id-trace.png)
+*保存した実応答と実ログから、同じ1回のアクセスを抜き出して並べた画面です。Lambdaのrequest_idとS3ログのrequestが一致しています。*
+
+![S3へ到着した両EC2の初回疎通ログ](/images/squid-agent/s3-smoke-logs.png)
+*S3ログ原本からAZ1・AZ2の最初のアクセスを1行ずつ表示して撮影しました。sourceでEC2を、requestで個々のアクセスを区別できます。IPとEC2 IDはマスクし、画面上だけで折り返しています。*
+
+HTTPSでは、SquidはCONNECT要求で接続先のホストとポートを受け取りますが、その後のTLS通信内のURLパスは読めません。今回はLambdaがCONNECT時の`X-Lab-Request`ヘッダーへ検証用IDを入れ、Squidの`%{X-Lab-Request}>h`でその値をログに残しています。これは検証の照合用に追加した仕組みです。
 
 ## PrivateLink経由の送信とS3保存を確認する
 
@@ -362,6 +394,9 @@ sudo ls -l /var/log/squid/access.log*
 ```
 
 `logfile_rotate 0`でSquid自身による二重の連番ローテーションを避け、`create 0640 squid squid`で新ファイルの権限をそろえます。
+
+![両EC2でローテーション後に確認した新旧アクセスログ](/images/squid-agent/logrotate-files.png)
+*保存したSSM応答を表示した画面です。inodeが異なる旧ファイルと新しいaccess.logがあり、両方ともsquid:squid・0640であることを確認しました。*
 
 各EC2でローテーション前後に5アクセスずつ、合計20件を発生させました。旧ファイルと新ファイルの両方を原本として保存し、全20件がS3へ1回ずつ到着することを確認しました。
 
