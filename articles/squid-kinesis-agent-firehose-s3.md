@@ -359,14 +359,6 @@ aws ssm get-command-invocation @awsA --command-id $dnsId --instance-id $az2 --qu
 
 6条件すべてで、CloudWatchのSumとAgentの送信成功記録のレコード数・バイト数が一致し、バイト数はEC2原本とも一致しました。前条件の送信完了を待って計測区間を分けました。
 
-
-
-### 料金は入力レコードごとに切り上げる
-
-Direct PUTの課金対象量は、**入力レコードごとに5,120 B単位へ切り上げて合計**します。S3ファイルの数や、`IncomingBytes`の総量を一度だけ切り上げる計算ではありません。
-
-まず、料金計算の入力になる実測値を確認します。次の画面では、**2レコード・合計22,300 B**が届いています。
-
 :::details 実行したコマンド
 **実行したコマンド（Windows / PowerShell）**
 
@@ -378,7 +370,11 @@ aws cloudwatch get-metric-statistics @cw --metric-name IncomingBytes --query Dat
 :::
 
 ![AWS CLIで検証区間のCloudWatchメトリクスを取得したターミナルの実画面](/images/squid-agent/cloudwatch-cli-terminal.png)
-*蓄積後・51,200 B設定のCloudWatchメトリクスを取得した実ターミナル画面です。上段のIncomingRecordsは2、下段のIncomingBytesは22,300 B。ここで確認できるのは切り上げ前の受信数・受信量で、課金対象量や請求額ではありません。*
+*蓄積後・51,200 B設定の検証区間を後から取得した実画面です。IncomingRecordsのSumは2、IncomingBytesは22,300 Bでした。*
+
+### 料金は入力レコードごとに切り上げる
+
+Direct PUTの課金対象量は、**入力レコードごとに5,120 B単位へ切り上げて合計**します。S3ファイルの数や、`IncomingBytes`の総量を一度だけ切り上げる計算ではありません。
 
 | 条件 | レコード数 | 計算上の課金対象量 | 集約なし比 |
 |---|---:|---:|---:|
@@ -387,9 +383,7 @@ aws cloudwatch get-metric-statistics @cw --metric-name IncomingBytes --query Dat
 | 蓄積後：5,120 B | 6 | 30,720 B | 95.0%削減 |
 | 蓄積後：51,200 B | 2 | 30,720 B | 95.0%削減 |
 
-1レコードの大きさは、別途保存したKinesis Agentの送信成功記録で**11,150 Bが2個**と確認しています。個別サイズはAgentの記録、合計数・合計量はCloudWatchで確認しています。
-
-計算は、各レコードを **11,150 B → 15,360 B（5,120 B × 3）**へ切り上げ、2個分を足して**30,720 B**です。レコード数はさらに減っても、課金対象量は5,120 B設定と同じでした。
+51,200 B設定の実レコードは11,150 Bが2個でした。各々を15,360 Bへ切り上げるため、合計は30,720 Bです。レコード数はさらに減っても、課金対象量は5,120 B設定と同じでした。
 
 これは実測から計算した量で、Cost Explorerの実請求額ではありません。**蓄積後の95%削減を、通常のリアルタイム収集にも当てはめることはできません。**
 
