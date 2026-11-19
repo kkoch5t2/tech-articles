@@ -8,8 +8,6 @@ published: false
 
 PrivateLink経由で使うSquidプロキシに、Kinesis Agent → Amazon Data Firehose → S3のログ収集を追加しました。実際のアクセスログを送り、到着した内容と、複数行をまとめて送る効果を確認します。
 
-検証では、EC2とS3の**786行・146,012バイトが一致し、欠損・重複は0**でした。一方、集約サイズを大きくするだけでは、通常の追記で送信レコード数は減りませんでした。
-
 既存のプロキシ構成とDirect PUTの料金の仕組みは、次の記事で説明しています。
 
 https://zenn.dev/kkoch5t2/articles/aws-privatelink-squid-proxy
