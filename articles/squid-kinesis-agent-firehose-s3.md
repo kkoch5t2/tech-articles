@@ -92,6 +92,18 @@ $bucket='YOUR_BUCKET_NAME'
 
 Private DNSを有効にすると、`firehose.ap-southeast-2.amazonaws.com`がEndpoint ENIのプライベートIPを返します。Kinesis Agentには通常のFirehose URLを指定します。2AZのENIが名前解決の対象ですが、同じAZのENIを必ず選ぶ設定ではありません。
 
+:::message
+**Private DNS（プライベートDNS）とは？**
+
+DNSは、サービスの名前から接続先のIPアドレスを調べる仕組みです。今回のPrivate DNS設定は、**Firehoseのいつもの名前を、VPC内の接続先へ結び付ける設定**です。Kinesis AgentのURLを変更せず、Endpoint ENIのプライベートIPへ接続できます。
+:::
+
+:::message
+**Endpoint ENI（エンドポイント用のENI）とは？**
+
+ENI（Elastic Network Interface）は、AWS上の仮想的なネットワーク接続口です。Interface VPC Endpointを作ると、指定したサブネットごとにAWSがEndpoint専用のENIを作成し、プライベートIPを割り当てます。今回の構成では、**Firehoseへアクセスするための「VPC内の窓口」が、2AZに1つずつ、合計2つある**と考えると分かりやすいです。
+:::
+
 ![Firehose用Interface EndpointのAWSコンソール画面](/images/squid-agent/firehose-endpoint-console.png)
 *AWSコンソールでavailable・Private DNS有効・2AZのサブネットを確認しました。一部の識別子をマスクしています。*
 
