@@ -3,7 +3,7 @@ title: "SquidのアクセスログをKinesis AgentとAmazon Data FirehoseでS3�
 emoji: "📦"
 type: "tech"
 topics: ["aws", "squid", "kinesis", "firehose", "cloudformation"]
-published: false
+published: true
 ---
 
 PrivateLink経由で使うSquidプロキシに、Kinesis Agent → Amazon Data Firehose → S3のログ収集を追加しました。実際のアクセスログを送り、到着した内容と、複数行をまとめて送る効果を確認します。
