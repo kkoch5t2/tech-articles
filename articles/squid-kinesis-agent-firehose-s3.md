@@ -95,7 +95,7 @@ Private DNSを有効にすると、`firehose.ap-southeast-2.amazonaws.com`がEnd
 :::message
 **Private DNS（プライベートDNS）とは？**
 
-DNSは、サービスの名前から接続先のIPアドレスを調べる仕組みです。今回のPrivate DNS設定は、**Firehoseのいつもの名前を、VPC内の接続先へ結び付ける設定**です。Kinesis AgentのURLを変更せず、Endpoint ENIのプライベートIPへ接続できます。
+DNSは、サービスの名前から接続先のIPアドレスを調べる仕組みです。今回のPrivate DNS設定は、**Firehoseの標準の接続先名を、VPC内の接続先へ結び付ける設定**です。Kinesis AgentのURLを変更せず、Endpoint ENIのプライベートIPへ接続できます。
 :::
 
 :::message
