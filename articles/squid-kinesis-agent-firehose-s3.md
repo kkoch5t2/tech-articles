@@ -95,7 +95,7 @@ Private DNSを有効にすると、`firehose.ap-southeast-2.amazonaws.com`がEnd
 :::message
 **Private DNS（プライベートDNS）とは？**
 
-DNSは、サービスの名前から接続先のIPアドレスを調べる仕組みです。今回のPrivate DNS設定は、**Firehoseの標準の接続先名を、VPC内の接続先へ結び付ける設定**です。Kinesis AgentのURLを変更せず、Endpoint ENIのプライベートIPへ接続できます。
+DNSは、サービスの名前から接続先のIPアドレスを調べる仕組みです。今回のPrivate DNS設定は、**Firehoseの標準の接続先名（`firehose.ap-southeast-2.amazonaws.com`）を、VPC内の接続先へ結び付ける設定**です。Kinesis AgentのURLを変更せず、Endpoint ENIのプライベートIPへ接続できます。
 :::
 
 :::message
@@ -147,6 +147,12 @@ aws iam get-role-policy @awsA --role-name $agentRole --policy-name $agentPolicy 
 *UserDataでパッケージ・設定・権限を用意し、systemdで起動します。読み取り位置はチェックポイントに保存します。*
 
 Kinesis AgentはEC2上で動くJava製の収集サービスです。Amazon Linux 2023の`aws-kinesis-agent`（今回の環境は`2.0.14-1.amzn2023`）とCorretto 17を使い、Kinesis Data Streamsを挟まずFirehoseへ送信します。
+
+:::message
+**Corretto 17とは？**
+
+Amazon Correttoは、Amazonが無償で提供するJavaの開発・実行環境（OpenJDK）です。「17」は対応するJavaのバージョンを表し、長期サポート（LTS）の対象です。今回は、**Javaで作られたKinesis AgentをEC2上で動かすための実行環境**として使っています。
+:::
 
 導入はUserDataで自動化しています。AgentにSquidログの読み取り権限を付け、チェックポイントを`/var/lib/aws-kinesis-agent/checkpoints`へ永続化します。
 
@@ -516,6 +522,7 @@ Endpoint・NLB・EBSは、EC2を止めても料金が発生します。Firehose�
 
 - [AWS：FirehoseとAWS PrivateLink](https://docs.aws.amazon.com/firehose/latest/dev/vpc.html)
 - [AWS：Kinesis Agentの設定](https://docs.aws.amazon.com/firehose/latest/dev/agent-config-settings.html)
+- [AWS：Amazon Corretto 17とは](https://docs.aws.amazon.com/corretto/latest/corretto-17-ug/what-is-corretto-17.html)
 - [AWS：Kinesis Agentの導入](https://docs.aws.amazon.com/firehose/latest/dev/download-install.html)
 - [AWS：Firehoseの料金](https://aws.amazon.com/firehose/pricing/)
 - [AWS：PrivateLinkの料金](https://aws.amazon.com/privatelink/pricing/)
