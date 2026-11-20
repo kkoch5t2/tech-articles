@@ -115,7 +115,7 @@ CSV自体には、金額が数値であることや、注文IDが一意である
 
 例えばJSONでは、`"注文ID": "001"`のように、情報の名前を示す**キー**と、その**値**を組み合わせます。値の中に、さらにキーと値の組み合わせを持たせる「入れ子」も使えます。
 
-![配送情報が入れ子になり、注文によって項目が異なるJSONの例](/images/structured-semi-unstructured-data/03-semi-structured.png)
+![配送情報が入れ子になり、注文によって項目が異なるJSONの例](/images/structured-semi-unstructured-data/03-semi-structured-v2.png)
 *注文001には配送の項目があり、注文002にはない。各データの構造はキーから読み取れる。*
 
 ```json:orders.json
