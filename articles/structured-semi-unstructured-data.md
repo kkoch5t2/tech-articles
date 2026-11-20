@@ -47,7 +47,7 @@ published: false
 
 「注文001でキーボードを購入し、午前中の配送を希望する」という場面を考えます。
 
-![表・JSON・問い合わせ本文で見る3種類のデータの違い](/images/structured-semi-unstructured-data/01-overview.png)
+![表・JSON・文章・画像・音声で見る3種類のデータの違い](/images/structured-semi-unstructured-data/01-overview-v2.png)
 *同じ注文に関する情報でも、項目への整理の仕方が異なる。各例は特徴が分かる部分を抜粋。*
 
 - **構造化データ**では、「注文ID」「商品名」「金額」「希望時間」などの列を用意し、共通のルールで記録します。
