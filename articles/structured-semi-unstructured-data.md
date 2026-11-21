@@ -288,3 +288,4 @@ https://zenn.dev/kkoch5t2/articles/41ad155b966681
 [^semi]: Snowflake公式ドキュメント「[Introduction to loading semi-structured data](https://docs.snowflake.com/en/user-guide/semistructured-intro)」。階層構造や半構造化データの取り扱いについて参照。
 [^unstructured]: Snowflake公式ドキュメント「[Unstructured data types](https://docs.snowflake.com/en/sql-reference/data-types-unstructured)」。3種類の分類と、ファイル形式の内部構造との区別について参照。
 [^lake]: AWS「[What is a Data Lake?](https://aws.amazon.com/what-is/data-lake/)」。データレイクとDWHの役割について参照。
+
