@@ -122,7 +122,27 @@ GitHubの本人確認後にAWSへ戻る際、この環境では既定の米国�
 
 ### 最初のデプロイと以後の更新
 
-初回は操作端末からパイプライン本体をデプロイします。以後はGitHubのmainへのpushで起動します。DockerビルドはCodeBuildが行うため、手元のPCにDockerを用意する必要はありません。
+#### 初回は操作端末からパイプライン本体を作成する
+
+パイプラインがまだ存在しない初回は、操作端末からCDKでパイプライン本体をデプロイします。cicdアカウントのCloudFormationに、`LakehousePipeline`スタックが作成されます。
+
+以下は、2026年11月22日にCloudFormationの`Events`タブで作成履歴を確認した実画面です。検索欄に`LakehousePipeline`を入力し、パイプライン本体のイベントを絞り込んでいます。
+
+![CloudFormationのLakehousePipeline作成履歴。初回のCREATE_COMPLETEと、その後のUPDATE_COMPLETEを確認](/images/lakehouse-cdk-cicd/initial-deploy-events.png)
+
+*初回作成時の`CREATE_COMPLETE`と、その後の更新完了を示す`UPDATE_COMPLETE`が記録されています。初回のコマンド実行中の画面ではなく、保存されているイベント履歴を撮影しています。*
+
+パイプライン作成後、この検証では初回の正常系を手動で起動し、test・prodへのデプロイとデータテストまで確認しました。その結果は後述の「検証環境でデータ処理と期待値照合を行う」に掲載しています。
+
+#### 以後はGitHubへのpushで自動実行する
+
+接続設定とパイプラインの作成が完了した後は、GitHubの`main`へのpushでパイプラインが起動します。CodePipelineの`Executions`タブでは、実行に使用したコミットと起動のきっかけを確認できます。
+
+![CodePipelineの実行履歴。mainへのpushで起動したコミットと、失敗・修正後の成功を確認](/images/lakehouse-cdk-cicd/github-push-executions.png)
+
+*`Trigger`列の「Commit … pushed in …/main」がpushによる起動を示します。画面は該当する2件を抜粋しています。下の失敗は意図的にGoldの集計SQLを壊した検証、上の成功は修正後の再実行です。詳しい結果は後述します。*
+
+Dockerビルドはパイプライン内のCodeBuildが行うため、手元のPCにDockerを用意する必要はありません。
 
 ### 検証に使ったコード
 
