@@ -66,6 +66,27 @@ CDKのbootstrapは、テンプレートなどを保存するS3、コンテナー
 
 GitHubとの接続にはAWS CodeConnectionsを使います。CLIで接続を作成した直後はPendingとなり、AWSコンソールでGitHubアプリとの接続を完了するとAvailableになります。GitHub側では新しく作成した検証用リポジトリ1件だけを選択しました。
 
+以下の2枚は、接続設定が完了した後に2026年11月22日に再撮影した実画面です。初回の認可操作中の画面ではなく、設定後の内容を確認しています。
+
+まず、Developer ToolsのSettings → Connectionsから接続を開きます。接続名は`lakehouse-cdk-github`、Providerは`GitHub`、Statusは`Available`です。利用するリージョンは`Asia Pacific (Sydney)`となっています。
+
+![AWS CodeConnectionsの接続設定。ProviderがGitHub、StatusがAvailable、リージョンがSydneyであることを確認](/images/lakehouse-cdk-cicd/codeconnections-settings.png)
+
+*接続名・Provider・Status・リージョンを抜粋しています。ブラウザ上部と、アカウントIDを含むARN列は切り取っています。*
+
+次に、CodePipelineのSourceアクションを開き、`Input`タブで接続と取得対象を確認します。`ConnectionArn`が使用する接続、`FullRepositoryId`が取得するリポジトリ、`BranchName`がブランチを表します。
+
+![CodePipelineのSourceアクション設定。対象リポジトリ、mainブランチ、変更検知が有効であることを確認](/images/lakehouse-cdk-cicd/codepipeline-source-settings.png)
+
+*Sourceアクションの設定部分を抜粋し、ConnectionArn内のAWSアカウントIDをマスクしています。*
+
+| 確認する項目 | 今回の設定 | 意味 |
+| --- | --- | --- |
+| `ConnectionArn` | 上記のCodeConnections接続のARN | GitHubへの接続に使用する設定 |
+| `FullRepositoryId` | `kkoch5t2/lakehouse-cdk-cicd` | コードを取得するリポジトリ |
+| `BranchName` | `main` | コードを取得するブランチ |
+| `DetectChanges` | `true` | 変更検知を有効にする設定 |
+
 GitHubの本人確認後にAWSへ戻る際、この環境では既定の米国リージョンへ転送されました。今回のプロジェクトに割り当てられたSydneyへ戻り、既存のPending接続でインストール済みアプリを選び直して接続を完了しました。実際に表示されたエラーと対処を、後で再現できるよう記録しています。
 
 ### 最初のデプロイと以後の更新
