@@ -48,7 +48,7 @@ CDKのPythonコードを`cdk synth`でCloudFormationテンプレートへ変換�
 
 S3バケット、Glueデータベース、Bronzeの外部テーブル、Athena WorkGroup、VPC、ECSタスク定義、Step FunctionsなどがIaCの対象です。Silver・GoldのIcebergテーブルは、デプロイ後にdbtを実行したときに作成します。
 
-### CodePipelineが進めるもの
+### CodePipelineが実行するもの
 
 パイプラインは、GitHubのコード取得、構成テスト、CDKの合成、パイプライン自身の更新、コンテナーイメージの発行、testへのデプロイ、データテスト、手動承認、prodへのデプロイ、データテストの順で進みます。
 
@@ -61,6 +61,26 @@ CDK PipelinesはAWS CodePipelineを構成するためのCDKのライブラリで
 CDKのbootstrapは、テンプレートなどを保存するS3、コンテナーイメージを保存するECR、デプロイ用IAMロールなどを用意する処理です。3アカウントそれぞれで実行し、test・prodではcicdアカウントからのデプロイを信頼する設定にします。
 
 この検証ではCloudFormation実行ロールにAdministratorAccessを使用しています。実運用では、デプロイ対象に合わせて権限を制限する設計が必要です。
+
+以下は、bootstrap完了後の設定を2026年11月22日に再撮影した実画面です。CloudFormationの`CDKToolkit`スタックから確認します。画面は必要な設定部分を抜粋し、AWSアカウントIDを含む物理IDやパラメータ値をマスクしています。
+
+#### cicdアカウントで作成されたリソース
+
+左側の`CDKToolkit`が`CREATE_COMPLETE`となっています。`Resources`タブでは、コンテナーイメージ用の`ContainerAssetsRepository`（ECR）や、デプロイ用の`DeploymentActionRole`などが作成されたことを確認できます。画像はリソース一覧の一部です。
+
+![cicdアカウントのbootstrap結果。CDKToolkitとECR・IAMロールなどの作成完了を確認](/images/lakehouse-cdk-cicd/bootstrap-cicd.png)
+
+#### testアカウントの信頼先設定
+
+testでも`CDKToolkit`が`CREATE_COMPLETE`となっています。`Parameters`タブの検索欄に`Trusted`を入力し、`TrustedAccounts`にcicdアカウントのIDが設定されていることを確認しました。この設定により、cicdアカウントからデプロイ用ロールを引き受けられるようにします。画像内の値はマスクしています。
+
+![testアカウントのbootstrap結果。CDKToolkitの作成完了とTrustedAccountsの設定を確認](/images/lakehouse-cdk-cicd/bootstrap-test.png)
+
+#### prodアカウントの信頼先設定
+
+prodでも同様に、`CDKToolkit`の作成完了と、`TrustedAccounts`に同じcicdアカウントのIDが設定されていることを確認しました。画像内の値はマスクしています。
+
+![prodアカウントのbootstrap結果。CDKToolkitの作成完了とTrustedAccountsの設定を確認](/images/lakehouse-cdk-cicd/bootstrap-prod.png)
 
 ### GitHubとの接続
 
