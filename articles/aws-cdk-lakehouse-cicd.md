@@ -52,7 +52,7 @@ S3バケット、Glueデータベース、Bronzeの外部テーブル、Athena W
 
 パイプラインは、GitHubのコード取得、構成テスト、CDKの合成、パイプライン自身の更新、コンテナーイメージの発行、testへのデプロイ、データテスト、手動承認、prodへのデプロイ、データテストの順で進みます。
 
-CDK PipelinesはAWS CodePipelineを構成するためのCDKのライブラリです。今回のデータ変換はGlue ETLジョブではなく、前回と同じdbt・Athena・Fargateを使います。[AWS公式のCDK Pipelinesを使ったデータレイクETLの記事](https://aws.amazon.com/blogs/devops/deploying-data-lake-etl-jobs-using-cdk-pipelines/)を参考にしていますが、サンプルをそのまま再現した構成ではありません。
+CDK PipelinesはAWS CodePipelineを構成するためのCDKのライブラリです。今回のデータ変換はGlue ETLジョブではなく、[前回と同じdbt・Athena・Fargate](https://zenn.dev/kkoch5t2/articles/aws-dbt-athena-medallion-lab)を使います。[AWS公式のCDK Pipelinesを使ったデータレイクETLの記事](https://aws.amazon.com/blogs/devops/deploying-data-lake-etl-jobs-using-cdk-pipelines/)を参考にしていますが、サンプルをそのまま再現した構成ではありません。
 
 ## 🛠️ 初期設定とパイプラインの作成
 
