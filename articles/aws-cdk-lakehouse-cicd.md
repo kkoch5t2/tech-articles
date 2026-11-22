@@ -1,0 +1,184 @@
+---
+title: "AWS CDK Pipelinesでレイクハウスの3アカウントCI/CDを検証する"
+emoji: "🏗️"
+type: "tech"
+topics: ["aws", "awscdk", "codepipeline", "dbt", "iceberg"]
+published: false
+---
+
+## 🎯 今回検証したいこと
+
+前回はS3・Apache Iceberg・AWS Glue Data Catalog・Amazon Athenaを組み合わせ、dbtをAmazon ECS on AWS Fargateで実行するレイクハウスを構築しました。
+
+https://zenn.dev/kkoch5t2/articles/aws-dbt-athena-medallion-lab
+
+今回は、その構成にInfrastructure as Code（IaC）と継続的インテグレーション・継続的デリバリー（CI/CD）を組み込みます。
+
+目的は、GitHubへ変更をpushしてから、検証環境の構築、データ処理、品質テスト、本番を模した環境への反映までの流れを実際に動かして理解することです。正常系だけでなく、集計SQLを意図的に壊し、データテストで本番への昇格を止められるかも確認します。
+
+この記事のprodは、架空の注文データを使う学習用の環境です。
+
+## 🏗️ 3アカウント構成とIaC・CI/CDの役割
+
+| アカウント | 役割 |
+| --- | --- |
+| cicd | CodePipeline・CodeBuild・アーティファクト管理 |
+| test | レイクハウスのデプロイとデータテスト |
+| prod | 手動承認後に反映する、本番を模したレイクハウス |
+
+AWS Settingsの「プロジェクト」を利用し、それぞれに含まれるAWSアカウントを分離しました。リポジトリを3個に分ける構成ではありません。1つのCDKアプリから、アカウントの異なる2つのデプロイ先を定義します。
+
+![3アカウントのCDK Pipelines構成](/images/lakehouse-cdk-cicd/architecture.png)
+
+### CDKが定義するもの
+
+CDKのPythonコードを`cdk synth`でCloudFormationテンプレートへ変換し、CloudFormationでリソースを作成します。前回のCloudFormationテンプレートは`CfnInclude`で取り込みました。前回のデプロイ済みリソースを操作するのではなく、新しいアカウント内に独立したリソースを作成します。
+
+S3バケット、Glueデータベース、Bronzeの外部テーブル、Athena WorkGroup、VPC、ECSタスク定義、Step FunctionsなどがIaCの対象です。Silver・GoldのIcebergテーブルは、デプロイ後にdbtを実行したときに作成します。
+
+### CodePipelineが進めるもの
+
+パイプラインは、GitHubのコード取得、構成テスト、CDKの合成、パイプライン自身の更新、コンテナーイメージの発行、testへのデプロイ、データテスト、手動承認、prodへのデプロイ、データテストの順で進みます。
+
+CDK PipelinesはAWS CodePipelineを構成するためのCDKのライブラリです。今回のデータ変換はGlue ETLジョブではなく、前回と同じdbt・Athena・Fargateを使います。[AWS公式のCDK Pipelinesを使ったデータレイクETLの記事](https://aws.amazon.com/blogs/devops/deploying-data-lake-etl-jobs-using-cdk-pipelines/)を参考にしていますが、サンプルをそのまま再現した構成ではありません。
+
+## 🛠️ 初期設定とパイプラインの作成
+
+### 各アカウントのbootstrap
+
+CDKのbootstrapは、テンプレートなどを保存するS3、コンテナーイメージを保存するECR、デプロイ用IAMロールなどを用意する処理です。3アカウントそれぞれで実行し、test・prodではcicdアカウントからのデプロイを信頼する設定にします。
+
+この検証ではCloudFormation実行ロールにAdministratorAccessを使用しています。実運用では、デプロイ対象に合わせて権限を制限する設計が必要です。
+
+### GitHubとの接続
+
+GitHubとの接続にはAWS CodeConnectionsを使います。CLIで接続を作成した直後はPendingとなり、AWSコンソールでGitHubアプリとの接続を完了するとAvailableになります。GitHub側では新しく作成した検証用リポジトリ1件だけを選択しました。
+
+GitHubの本人確認後にAWSへ戻る際、この環境では既定の米国リージョンへ転送されました。今回のプロジェクトに割り当てられたSydneyへ戻り、既存のPending接続でインストール済みアプリを選び直して接続を完了しました。実際に表示されたエラーと対処を、後で再現できるよう記録しています。
+
+### 最初のデプロイと以後の更新
+
+初回は操作端末からパイプライン本体をデプロイします。以後はGitHubのmainへのpushで起動します。DockerビルドはCodeBuildが行うため、手元のPCにDockerを用意する必要はありません。
+
+### 検証に使ったコード
+
+今回使用したCDKアプリ、dbtのモデル・テスト、サンプルCSV、検証用スクリプトは、以下のGitHubリポジトリにまとめています。セットアップと実行の詳しいコマンドはREADMEに記載しています。
+
+https://github.com/kkoch5t2/lakehouse-cdk-cicd
+
+## ✅ 検証環境でデータ処理と期待値照合を行う
+
+### 構成テストとデータテストを実行する場所
+
+構成テストは、CDKが合成するテンプレートを調べる処理です。手動承認が本番デプロイより先にあるか、常時稼働のECSサービスやNAT Gatewayを作っていないか、S3の公開ブロックがあるかなどを確認します。
+
+データテストは、実際にtestへデプロイした後で実行します。CodeBuildから検証用IAMロールを引き受け、CSVをS3へ配置し、Step Functionsを起動します。Step FunctionsはFargateの単発タスクで`dbt build`を実行し、コンテナーの終了コードを確認します。
+
+dbtが失敗すればStep Functionsも失敗し、それを待つCodeBuildも失敗します。したがってパイプラインは後続の本番ステージへ進みません。
+
+### dbtテストに加えて固定の期待値を確認する
+
+| 確認対象 | サンプルCSVに対する期待値 |
+| --- | --- |
+| Bronze | 8行 |
+| Silver正常データ | 4行 |
+| Silver不正データ | 3行 |
+| Gold | 2026-11-01、注文2件、売上3850.00 |
+
+CodeBuildは、dbtの終了後にAthenaで上記の結果を照合します。`dbt build`が終了しただけで成功とせず、既知の入力に対する結果まで確認するためです。
+
+初回実行では、test・prodの両方で表の期待値と一致しました。dbtは両環境とも3モデル・8データテストが成功し、ログは`PASS=11 WARN=0 ERROR=0`となりました。dbt自体の実行時間はtestが約26.02秒、prodが約26.00秒です。コンテナーの起動待ちやCodeBuildの準備は、このdbt実行時間には含みません。
+
+Test成功後に手動承認で止まっている画面です。この検証では結果を確認してから承認操作を行い、Prodへ進めました。
+
+![Test成功後の手動承認待ち](/images/lakehouse-cdk-cicd/manual-approval.png)
+
+初回は全ステージが成功し、パイプライン全体では16分47秒でした。
+
+![初回のパイプライン成功](/images/lakehouse-cdk-cicd/first-success.png)
+
+## 🧪 意図的な失敗で本番への昇格を止める
+
+GoldのSQLを`sum(amount)`から`sum(amount) + 100`へ変更します。SQLの構文としては実行できても、Silverから再計算した売上との照合テストが不一致を検出する変更です。
+
+確認するのは、Testの失敗、本番デプロイが実行されないこと、直前に成功した本番のタスク定義とイメージが変化しないことです。CodePipelineの画面では以前の成功結果も残るため、今回の実行IDとアクション履歴を合わせて確認します。
+
+この構成では、Assetsステージで候補イメージをtest・prodのECRへ先に配布します。品質テストが失敗した場合に止める対象は、そのイメージを本番のタスク定義へ反映するデプロイと、本番のデータ処理実行です。本番ECRに候補イメージが存在することと、本番でそのイメージを使うことは区別します。
+
+修正後は元のSQLへ戻してpushし、Test成功、手動承認、Prod成功までを確認します。
+
+### 意図的な失敗の結果
+
+故障を入れたコミットはGitHubのWebhookで自動起動しました。CDKの構成テストとインフラのデプロイは成功しましたが、`sales_reconcile`が不一致2行を検出し、dbtは`PASS=10 WARN=0 ERROR=1`となりました。
+
+この照合SQLは、期待側にしかない行と実際側にしかない行を両方向の`EXCEPT`で取り出して結合します。今回の2行は、期待側と実際側の集計行がそれぞれ1行ずつ異なるためです。
+
+実行ログではFargateの終了コードが1となり、`ecs:runTask.sync`のタスクが`States.TaskFailed`で失敗しました。CodeBuildも終了コード1となり、CodePipelineのTestが失敗、Prodは`Didn't Run`となりました。ワークフローには正常終了確認用のChoiceもありますが、今回の失敗はその前のECS連携タスクから伝わっています。
+
+![故障テストでTestが失敗しProdは未実行](/images/lakehouse-cdk-cicd/broken-gold.png)
+
+本番については次を検査し、全て一致しました。
+
+| 確認項目 | 故障前後の比較 |
+| --- | --- |
+| スタック最終更新時刻 | 変化なし |
+| タスク定義ARN | 変化なし |
+| 使用するイメージURI・ダイジェスト | 変化なし |
+| Step Functions実行履歴 | 追加なし |
+| 故障テスト実行IDのProdアクション | 0件 |
+| Athenaで再確認したGold | 2026-11-01、注文2件、売上3850.00 |
+
+![故障後も変化しなかった本番の売上](/images/lakehouse-cdk-cicd/production-protected.png)
+
+### 修正後の再昇格
+
+`sum(amount)`へ戻したコミットもWebhookで自動起動し、Test成功後に手動承認を経て、Prodのデータテストまで全ステージが成功しました。修正後のdbt実行時間はtestが約38.02秒、prodが約33.08秒でした。パイプライン全体は12分27秒で、両環境の件数・売上の期待値照合も再び成功しました。
+
+![修正後は全ステージが成功](/images/lakehouse-cdk-cicd/fixed-success.png)
+
+| ケース | コミット | 実行IDの先頭8文字 | 結果 |
+| --- | --- | --- | --- |
+| 初回正常系 | `8579536c` | `d699c890` | Test・Prod成功 |
+| 意図的な故障 | `b4c98c82` | `628184d6` | Test失敗、Prod未実行 |
+| SQLを修正 | `a6b5c644` | `d96c48de` | Test・Prod成功 |
+
+接続作成直後のPending状態でもSource失敗が2回記録されています。これらはGitHub接続前の初期設定に伴う失敗で、表のデータ品質テストとは分けて扱っています。
+
+## 📝 検証で学んだことと片付け
+
+### インフラの成功とデータ処理の成功は別に確認する
+
+CDK synthやCloudFormationの成功だけでは、SQLの実行結果まで保証されません。構成テスト、AWSへの実デプロイ、dbtテスト、固定の期待値との照合をそれぞれの場所で実行する構成にしました。
+
+修正後に使用しているイメージのダイジェストはtest・prodで一致し、初回に検証した正しいイメージに戻っていました。
+
+また、データテストが失敗しても、その実行中に書き換えたテーブル全体が自動的に元へ戻るわけではありません。今回止めるのは次の環境への昇格です。全モデルの一括ロールバックや公開前データの切り替えは、別の設計になります。
+
+### 実行コストと残るリソース
+
+Fargateは0.5 vCPU・1 GiBの単発タスクです。ECSサービス、EC2、NAT Gateway、ロードバランサー、定期実行は作成していません。CodeBuild・CodePipeline V2・Fargate・Athenaの実行と、S3・ECR・CloudWatch Logs・KMSなどに課金されます。手動承認の待機中にCodeBuildを動かす構成にはしていません。
+
+CodePipeline V2はアクションごとに実行時間を分単位で切り上げ、1分あたり0.002 USDです。手動承認とカスタムアクションは課金対象外です。CodeBuildの実行料はこれと別にかかります。料金計算では無料枠を控除せず、1 USD = 150円、税別として概算します。
+
+実行ログから集計した、CodeBuildとCodePipelineの主な実行料の概算は次のとおりです。
+
+| 対象 | 集計量 | USD | 円換算 |
+| --- | --- | --- | --- |
+| CodeBuild small | 約31課金分 | 0.155 | 23.25円 |
+| CodePipeline V2 | 61アクション課金分 | 0.122 | 18.30円 |
+| 上記2サービスの小計 | — | 0.277 | 41.55円 |
+
+これは請求明細の確定額ではなく、実行時間と料金単価による概算です。Fargate・パブリックIPv4・Athena・S3・ECR・CloudWatch Logs・Step Functions・KMSは小計に含みません。保存期間によっても料金が変わります。無料枠とクレジットは控除していません。
+
+最終確認では両環境ともFargateの実行中タスクは0でした。確認用にS3・ECR・KMSなどは残しており、保存・維持に伴う料金は継続します。
+
+証跡を保存した後に片付けます。データと結果のS3バケットはRetainとしているため、ワークロードスタックを削除しても残ります。CDKToolkitとそのS3・ECRも別に存在します。スタック削除だけで全ての課金対象が消えるとは扱わず、残るリソースを確認します。
+
+### 参考資料
+
+- [CDK Pipelines](https://docs.aws.amazon.com/cdk/v2/guide/cdk-pipeline.html)
+- [CloudFormationテンプレートの取り込み](https://docs.aws.amazon.com/cdk/v2/guide/use-cfn-template.html)
+- [CDK bootstrap](https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping.html)
+- [Deploy data lake ETL jobs using CDK Pipelines](https://aws.amazon.com/blogs/devops/deploying-data-lake-etl-jobs-using-cdk-pipelines/)
+- [CodePipeline料金](https://aws.amazon.com/codepipeline/pricing/)
+- [CodeBuild料金](https://aws.amazon.com/codebuild/pricing/)
