@@ -28,7 +28,7 @@ https://zenn.dev/kkoch5t2/articles/aws-dbt-athena-medallion-lab
 
 AWS Settingsの「プロジェクト」を利用し、それぞれに含まれるAWSアカウントを分離しました。リポジトリを3個に分ける構成ではありません。1つのCDKアプリから、アカウントの異なる2つのデプロイ先を定義します。
 
-![3アカウントのCDK Pipelines構成](/images/lakehouse-cdk-cicd/architecture.png)
+![3アカウントのCDK Pipelines構成。①検証環境への反映、②dbt実行と結果検証、③手動承認、④本番相当環境への反映を示す](/images/lakehouse-cdk-cicd/architecture-numbered.png)
 
 ### CDKが定義するもの
 
