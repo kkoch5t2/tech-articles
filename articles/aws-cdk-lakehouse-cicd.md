@@ -154,6 +154,10 @@ https://github.com/kkoch5t2/lakehouse-cdk-cicd
 
 ### 構成テストとデータテストを実行する場所
 
+![構成テストはcicdのCodeBuildで実行し、データテストはデプロイ後にtestのS3・Step Functions・Fargate・Athenaを呼び出す](/images/lakehouse-cdk-cicd/test-execution-locations.png)
+
+図の下段では、左側が処理を指示するcicdアカウント、右側がデータ処理を行うtestアカウントです。下段の①〜③は、CodeBuildが検証用IAMロールを引き受けて呼び出す処理の順序を示しています。
+
 構成テストは、CDKが合成するテンプレートを調べる処理です。手動承認が本番デプロイより先にあるか、常時稼働のECSサービスやNAT Gatewayを作っていないか、S3の公開ブロックがあるかなどを確認します。
 
 データテストは、実際にtestへデプロイした後で実行します。CodeBuildから検証用IAMロールを引き受け、CSVをS3へ配置し、Step Functionsを起動します。Step FunctionsはFargateの単発タスクで`dbt build`を実行し、コンテナーの終了コードを確認します。
@@ -170,6 +174,10 @@ dbtが失敗すればStep Functionsも失敗し、それを待つCodeBuildも失
 | Gold | 2026-11-01、注文2件、売上3850.00 |
 
 CodeBuildは、dbtの終了後にAthenaで上記の結果を照合します。`dbt build`が終了しただけで成功とせず、既知の入力に対する結果まで確認するためです。
+
+![dbtのデータテスト成功後に、Athenaで取得した件数・売上と検証スクリプトに定義した固定の期待値をCodeBuildで照合する](/images/lakehouse-cdk-cicd/fixed-expectation-check.png)
+
+左は正常系で実際に取得した結果、右は検証スクリプトにあらかじめ定義した期待値です。dbt内の整合性テストとは別に、CodeBuildで両者を照合します。
 
 初回実行では、test・prodの両方で表の期待値と一致しました。dbtは両環境とも3モデル・8データテストが成功し、ログは`PASS=11 WARN=0 ERROR=0`となりました。dbt自体の実行時間はtestが約26.02秒、prodが約26.00秒です。コンテナーの起動待ちやCodeBuildの準備は、このdbt実行時間には含みません。
 
@@ -190,6 +198,10 @@ GoldのSQLを`sum(amount)`から`sum(amount) + 100`へ変更します。SQLの�
 この構成では、Assetsステージで候補イメージをtest・prodのECRへ先に配布します。品質テストが失敗した場合に止める対象は、そのイメージを本番のタスク定義へ反映するデプロイと、本番のデータ処理実行です。本番ECRに候補イメージが存在することと、本番でそのイメージを使うことは区別します。
 
 修正後は元のSQLへ戻してpushし、Test成功、手動承認、Prod成功までを確認します。
+
+![Goldの売上を100増やす変更をpushし、dbtの照合失敗からFargate・Step Functions・CodeBuildへ失敗が伝わり、CodePipelineが本番への昇格を止める流れ](/images/lakehouse-cdk-cicd/promotion-failure-flow.png)
+
+図は今回の故障テストで失敗が伝わった経路です。固定値との照合より前にdbtの`sales_reconcile`が不一致を検出したため、この実行ではその後のCodeBuildによる固定値照合へ進んでいません。本番ECRへの候補イメージの配布と、本番デプロイの停止も分けて示しています。
 
 ### 意図的な失敗の結果
 
