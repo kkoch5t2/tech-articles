@@ -3,7 +3,7 @@ title: "AWS CDK Pipelinesでレイクハウスの3アカウントCI/CDを検証�
 emoji: "🏗️"
 type: "tech"
 topics: ["aws", "awscdk", "codepipeline", "dbt", "iceberg"]
-published: false
+published: true
 ---
 
 ## 🎯 今回検証したいこと
