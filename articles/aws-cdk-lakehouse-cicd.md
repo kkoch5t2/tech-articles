@@ -173,7 +173,7 @@ dbtが失敗すればStep Functionsも失敗し、それを待つCodeBuildも失
 | Silver不正データ | 3行 |
 | Gold | 2026-11-01、注文2件、売上3850.00 |
 
-CodeBuildは、dbtの終了後にAthenaで上記の結果を照合します。`dbt build`が終了しただけで成功とせず、既知の入力に対する結果まで確認するためです。
+CodeBuildは、テスト用にS3へ配置したサンプルデータをdbtで処理した後、Athenaで処理結果を取得し、そのサンプルデータから期待される件数・売上（上表）と照合します。`dbt build`が終了しただけで成功とせず、用意したサンプルデータが想定どおりに処理されたことまで確認するためです。
 
 ![dbtのデータテスト成功後に、Athenaで取得した件数・売上と検証スクリプトに定義した固定の期待値をCodeBuildで照合する](/images/lakehouse-cdk-cicd/fixed-expectation-check.png)
 
