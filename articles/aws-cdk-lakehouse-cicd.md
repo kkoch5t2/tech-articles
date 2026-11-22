@@ -207,6 +207,19 @@ GoldのSQLを`sum(amount)`から`sum(amount) + 100`へ変更します。SQLの�
 
 故障を入れたコミットはGitHubのWebhookで自動起動しました。CDKの構成テストとインフラのデプロイは成功しましたが、`sales_reconcile`が不一致2行を検出し、dbtは`PASS=10 WARN=0 ERROR=1`となりました。
 
+以下は、故障テスト時に保存した`dbt.log`から、エラーと集計行をWindowsのPowerShellで抜粋表示した実画面です。
+
+**実行したコマンド**
+
+```powershell
+Get-Content .\evidence\02-broken-gold\test-dbt\logs\dbt.log |
+  Select-String -Pattern '\[error\]|Done\. PASS='
+```
+
+![故障テストの保存済みdbtログ。sales_reconcileのFAIL 2、Got 2 results、PASS=10 WARN=0 ERROR=1を確認](/images/lakehouse-cdk-cicd/dbt-failure-log.png)
+
+*2026年11月22日の検証ログを、11月23日にNAB7で再表示して撮影しています。故障テストを再実行した画面ではありません。ログ時刻はUTCです。画像は該当する4行を抜粋し、ユーザー名を含むプロンプト部分を切り取っています。*
+
 この照合SQLは、期待側にしかない行と実際側にしかない行を両方向の`EXCEPT`で取り出して結合します。今回の2行は、期待側と実際側の集計行がそれぞれ1行ずつ異なるためです。
 
 実行ログではFargateの終了コードが1となり、`ecs:runTask.sync`のタスクが`States.TaskFailed`で失敗しました。CodeBuildも終了コード1となり、CodePipelineのTestが失敗、Prodは`Didn't Run`となりました。ワークフローには正常終了確認用のChoiceもありますが、今回の失敗はその前のECS連携タスクから伝わっています。
