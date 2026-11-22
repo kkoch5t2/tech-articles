@@ -66,6 +66,15 @@ CDKのbootstrapは、テンプレートなどを保存するS3、コンテナー
 
 GitHubとの接続にはAWS CodeConnectionsを使います。CLIで接続を作成した直後はPendingとなり、AWSコンソールでGitHubアプリとの接続を完了するとAvailableになります。GitHub側では新しく作成した検証用リポジトリ1件だけを選択しました。
 
+:::message
+**AWS CodeConnectionsとは？**
+AWS CodeConnectionsは、CodePipelineなどのAWSサービスと、GitHubなどの外部コードリポジトリを接続するためのサービスです。今回の構成では、GitHubアプリでアクセスを許可したリポジトリからコードを取得し、変更を検知してパイプラインを起動するために使います。
+
+作成した接続には、AWSリソースを識別するARN（Amazon Resource Name）が付与されます。CDKやCodePipelineにはこの接続ARNを指定するため、GitHubのアクセストークンをコードに直接記載する必要はありません。CodeConnectionsがGitHubとの接続を担当し、CodePipelineがコード取得後のビルド・テスト・デプロイの工程を管理します。
+
+詳しくは[AWS公式ドキュメント「接続とは」](https://docs.aws.amazon.com/dtconsole/latest/userguide/welcome-connections.html)を参照してください。
+:::
+
 以下の2枚は、接続設定が完了した後に2026年11月22日に再撮影した実画面です。初回の認可操作中の画面ではなく、設定後の内容を確認しています。
 
 まず、Developer ToolsのSettings → Connectionsから接続を開きます。接続名は`lakehouse-cdk-github`、Providerは`GitHub`、Statusは`Available`です。利用するリージョンは`Asia Pacific (Sydney)`となっています。
