@@ -32,7 +32,7 @@ AWS Settingsの「プロジェクト」を利用し、それぞれに含まれ�
 
 ### CDKが定義するもの
 
-CDKのPythonコードを`cdk synth`でCloudFormationテンプレートへ変換し、CloudFormationでリソースを作成します。前回のCloudFormationテンプレートは`CfnInclude`で取り込みました。前回のデプロイ済みリソースを操作するのではなく、新しいアカウント内に独立したリソースを作成します。
+CDKのPythonコードを`cdk synth`でCloudFormationテンプレートへ変換し、CloudFormationでリソースを作成します。[前回のCloudFormationテンプレート](https://zenn.dev/kkoch5t2/articles/aws-dbt-athena-medallion-lab)は`CfnInclude`で取り込みました。前回のデプロイ済みリソースを操作するのではなく、新しいアカウント内に独立したリソースを作成します。
 
 S3バケット、Glueデータベース、Bronzeの外部テーブル、Athena WorkGroup、VPC、ECSタスク定義、Step FunctionsなどがIaCの対象です。Silver・GoldのIcebergテーブルは、デプロイ後にdbtを実行したときに作成します。
 
