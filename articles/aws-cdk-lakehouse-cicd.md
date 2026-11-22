@@ -34,6 +34,15 @@ AWS Settingsの「プロジェクト」を利用し、それぞれに含まれ�
 
 CDKのPythonコードを`cdk synth`でCloudFormationテンプレートへ変換し、CloudFormationでリソースを作成します。[前回のCloudFormationテンプレート](https://zenn.dev/kkoch5t2/articles/aws-dbt-athena-medallion-lab)は`CfnInclude`で取り込みました。前回のデプロイ済みリソースを操作するのではなく、新しいアカウント内に独立したリソースを作成します。
 
+:::message
+**CfnIncludeとは？**
+`CfnInclude`は、既存のCloudFormationテンプレート（YAML／JSON）をCDKアプリへ読み込み、テンプレート内のリソース定義をCDKから扱えるようにする機能です。すべての定義をPythonで書き直さずに再利用できます。
+
+`cdk synth`を実行すると、読み込んだ定義を含むCloudFormationテンプレートが生成されます。今回の検証では、この仕組みで以前のレイクハウス構成を再利用し、test・prodアカウントへ新しくデプロイしています。
+
+詳しくは[AWS公式ドキュメント「既存のCloudFormationテンプレートをインポートする」](https://docs.aws.amazon.com/cdk/v2/guide/use-cfn-template.html)を参照してください。
+:::
+
 S3バケット、Glueデータベース、Bronzeの外部テーブル、Athena WorkGroup、VPC、ECSタスク定義、Step FunctionsなどがIaCの対象です。Silver・GoldのIcebergテーブルは、デプロイ後にdbtを実行したときに作成します。
 
 ### CodePipelineが進めるもの
