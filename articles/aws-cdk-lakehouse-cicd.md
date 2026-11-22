@@ -8,7 +8,7 @@ published: false
 
 ## 🎯 今回検証したいこと
 
-前回はS3・Apache Iceberg・AWS Glue Data Catalog・Amazon Athenaを組み合わせ、dbtをAmazon ECS on AWS Fargateで実行するレイクハウスを構築しました。
+以前、S3・Apache Iceberg・AWS Glue Data Catalog・Amazon Athenaを組み合わせ、dbtをAmazon ECS on AWS Fargateで実行するレイクハウスを構築しました。
 
 https://zenn.dev/kkoch5t2/articles/aws-dbt-athena-medallion-lab
 
@@ -32,7 +32,7 @@ AWS Settingsの「プロジェクト」を利用し、それぞれに含まれ�
 
 ### CDKが定義するもの
 
-CDKのPythonコードを`cdk synth`でCloudFormationテンプレートへ変換し、CloudFormationでリソースを作成します。[前回のCloudFormationテンプレート](https://zenn.dev/kkoch5t2/articles/aws-dbt-athena-medallion-lab)は`CfnInclude`で取り込みました。前回のデプロイ済みリソースを操作するのではなく、新しいアカウント内に独立したリソースを作成します。
+CDKのPythonコードを`cdk synth`でCloudFormationテンプレートへ変換し、CloudFormationでリソースを作成します。[以前の検証で使用したCloudFormationテンプレート](https://zenn.dev/kkoch5t2/articles/aws-dbt-athena-medallion-lab)は`CfnInclude`で取り込みました。以前の検証でデプロイしたリソースを操作するのではなく、新しいアカウント内に独立したリソースを作成します。
 
 :::message
 **CfnIncludeとは？**
@@ -52,7 +52,7 @@ S3バケット、Glueデータベース、Bronzeの外部テーブル、Athena W
 
 パイプラインは、GitHubのコード取得、構成テスト、CDKの合成、パイプライン自身の更新、コンテナーイメージの発行、testへのデプロイ、データテスト、手動承認、prodへのデプロイ、データテストの順で進みます。
 
-CDK PipelinesはAWS CodePipelineを構成するためのCDKのライブラリです。今回のデータ変換はGlue ETLジョブではなく、[前回と同じdbt・Athena・Fargate](https://zenn.dev/kkoch5t2/articles/aws-dbt-athena-medallion-lab)を使います。[AWS公式のCDK Pipelinesを使ったデータレイクETLの記事](https://aws.amazon.com/blogs/devops/deploying-data-lake-etl-jobs-using-cdk-pipelines/)を参考にしていますが、サンプルをそのまま再現した構成ではありません。
+CDK PipelinesはAWS CodePipelineを構成するためのCDKのライブラリです。今回のデータ変換はGlue ETLジョブではなく、[以前の検証と同じdbt・Athena・Fargate](https://zenn.dev/kkoch5t2/articles/aws-dbt-athena-medallion-lab)を使います。[AWS公式のCDK Pipelinesを使ったデータレイクETLの記事](https://aws.amazon.com/blogs/devops/deploying-data-lake-etl-jobs-using-cdk-pipelines/)を参考にしていますが、サンプルをそのまま再現した構成ではありません。
 
 ## 🛠️ 初期設定とパイプラインの作成
 
