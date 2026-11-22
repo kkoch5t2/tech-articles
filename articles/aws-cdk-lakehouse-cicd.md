@@ -277,7 +277,7 @@ CodePipeline V2はアクションごとに実行時間を分単位で切り上�
 | CodePipeline V2 | 61アクション課金分 | 0.122 | 18.30円 |
 | 上記2サービスの小計 | — | 0.277 | 41.55円 |
 
-これは請求明細の確定額ではなく、実行時間と料金単価による概算です。Fargate・パブリックIPv4・Athena・S3・ECR・CloudWatch Logs・Step Functions・KMSは小計に含みません。保存期間によっても料金が変わります。無料枠とクレジットは控除していません。
+これは請求明細の確定額ではなく、実行時間と[CodeBuildの料金単価](https://aws.amazon.com/codebuild/pricing/)・[CodePipelineの料金単価](https://aws.amazon.com/codepipeline/pricing/)による概算です。Fargate・パブリックIPv4・Athena・S3・ECR・CloudWatch Logs・Step Functions・KMSは小計に含みません。保存期間によっても料金が変わります。無料枠とクレジットは控除していません。
 
 最終確認では両環境ともFargateの実行中タスクは0でした。確認用にS3・ECR・KMSなどは残しており、保存・維持に伴う料金は継続します。
 
