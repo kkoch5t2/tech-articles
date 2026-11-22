@@ -36,6 +36,9 @@ CDKのPythonコードを`cdk synth`でCloudFormationテンプレートへ変換�
 
 :::message
 **CfnIncludeとは？**
+
+![CfnIncludeで既存のCloudFormationテンプレートをCDKへ読み込み、合成後にtest・prodへ新規デプロイする流れ](/images/lakehouse-cdk-cicd/cfninclude.png)
+
 `CfnInclude`は、既存のCloudFormationテンプレート（YAML／JSON）をCDKアプリへ読み込み、テンプレート内のリソース定義をCDKから扱えるようにする機能です。すべての定義をPythonで書き直さずに再利用できます。
 
 `cdk synth`を実行すると、読み込んだ定義を含むCloudFormationテンプレートが生成されます。今回の検証では、この仕組みで以前のレイクハウス構成を再利用し、test・prodアカウントへ新しくデプロイしています。
