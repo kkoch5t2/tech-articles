@@ -263,7 +263,7 @@ CDK synthやCloudFormationの成功だけでは、SQLの実行結果まで保証
 
 また、データテストが失敗しても、その実行中に書き換えたテーブル全体が自動的に元へ戻るわけではありません。今回止めるのは次の環境への昇格です。全モデルの一括ロールバックや公開前データの切り替えは、別の設計になります。
 
-### 実行コストと残るリソース
+### 実行コスト
 
 Fargateは0.5 vCPU・1 GiBの単発タスクです。ECSサービス、EC2、NAT Gateway、ロードバランサー、定期実行は作成していません。CodeBuild・CodePipeline V2・Fargate・Athenaの実行と、S3・ECR・CloudWatch Logs・KMSなどに課金されます。手動承認の待機中にCodeBuildを動かす構成にはしていません。
 
@@ -278,10 +278,6 @@ CodePipeline V2はアクションごとに実行時間を分単位で切り上�
 | 上記2サービスの小計 | — | 0.277 | 41.55円 |
 
 これは請求明細の確定額ではなく、実行時間と[CodeBuildの料金単価](https://aws.amazon.com/codebuild/pricing/)・[CodePipelineの料金単価](https://aws.amazon.com/codepipeline/pricing/)による概算です。Fargate・パブリックIPv4・Athena・S3・ECR・CloudWatch Logs・Step Functions・KMSは小計に含みません。保存期間によっても料金が変わります。無料枠とクレジットは控除していません。
-
-最終確認では両環境ともFargateの実行中タスクは0でした。確認用にS3・ECR・KMSなどは残しており、保存・維持に伴う料金は継続します。
-
-証跡を保存した後に片付けます。データと結果のS3バケットはRetainとしているため、ワークロードスタックを削除しても残ります。CDKToolkitとそのS3・ECRも別に存在します。スタック削除だけで全ての課金対象が消えるとは扱わず、残るリソースを確認します。
 
 ### 参考資料
 
