@@ -6,7 +6,7 @@ Zennの記事と本、Qiitaの記事をMarkdownで管理するリポジトリで
 
 | 公開先 | ファイルの場所 | 公開方法 |
 | --- | --- | --- |
-| Zenn | 記事は `articles/`、本は `books/`、画像は `images/` | Zennと連携したGitHubブランチから同期 |
+| Zenn | 記事は `zenn/articles/`、本は `zenn/books/`、画像は `zenn/images/` | `main` から公開用ブランチ `zenn-deploy` に自動同期し、Zennに反映 |
 | Qiita | 記事は `qiita/public/` | Qiita CLIで対象の記事を指定して投稿 |
 
 このGitHubリポジトリは公開されています。ZennやQiitaで下書きにしていても、GitHubへプッシュしたファイルは閲覧できます。公開前に伏せたい原稿や画像は手元に置いてください。
@@ -33,11 +33,13 @@ npm run qiita -- login
 
 ## Zennの記事を書く・公開する
 
-1. `npx zenn new:article` で原稿を作ります。`articles/` にMarkdownファイルが生成されます。下書きの間はファイル先頭の `published` を `false` にします。
-2. `npx zenn preview` を実行し、`http://localhost:8000` で本文、画像、リンクを確認します。
-3. 公開するときは `published: true` にして、Zennの連携対象ブランチに反映します。反映結果は[Zennのデプロイ履歴](https://zenn.dev/dashboard/deploys)で確認できます。
+1. `npm run zenn -- new:article` で原稿を作ります。`zenn/articles/` にMarkdownファイルが生成されます。下書きの間はファイル先頭の `published` を `false` にします。
+2. `npm run zenn -- preview` を実行し、`http://localhost:8000` で本文、画像、リンクを確認します。
+3. 公開するときは `published: true` にして、`main` に反映します。GitHub Actionsが `zenn/` の中身を `zenn-deploy` の直下へ同期します。反映結果は[GitHub Actionsの実行履歴](https://github.com/kkoch5t2/tech-articles/actions/workflows/sync-zenn.yml)と[Zennのデプロイ履歴](https://zenn.dev/dashboard/deploys)で確認できます。
 
-公開済みの記事を直すときは、同じファイル名（`slug`）の原稿を編集して反映します。本を作るときは `npx zenn new:book` を実行します。
+公開済みの記事を直すときは、同じファイル名（`slug`）の原稿を編集して反映します。本を作るときは `npm run zenn -- new:book` を実行します。
+
+画像は `zenn/images/` に置き、記事内では `/images/ファイル名` で参照します。記事の編集は作業ブランチで行い、公開用の `zenn-deploy` はGitHub Actionsで更新します。
 
 ## Qiitaの記事を書く・公開する
 
