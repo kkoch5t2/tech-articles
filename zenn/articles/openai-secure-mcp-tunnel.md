@@ -8,7 +8,7 @@ published: true
 
 ## Secure MCP Tunnelの概要
 
-![OpenAI公式のSecure MCP Tunnelのリクエスト処理の流れ](https://raw.githubusercontent.com/kkoch5t2/zenn-contents/main/images/openai-secure-mcp-tunnel-request-flow.png)
+![OpenAI公式のSecure MCP Tunnelのリクエスト処理の流れ](/images/openai-secure-mcp-tunnel-request-flow.png)
 
 出典：[OpenAI「Secure MCP Tunnel」](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels)
 
