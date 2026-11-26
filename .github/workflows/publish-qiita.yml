@@ -1,0 +1,61 @@
+name: Qiitaの記事を投稿・更新
+
+on:
+  workflow_dispatch:
+    inputs:
+      article:
+        description: 'qiita/public/ にある記事ファイル名（.md を除く）'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: qiita-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      ARTICLE_NAME: ${{ inputs.article }}
+    steps:
+      - name: mainを取得
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+      - name: 投稿対象を検証
+        shell: bash
+        run: |
+          if [[ ! "$ARTICLE_NAME" =~ ^[A-Za-z0-9_-]+$ ]] || [[ ! -f "qiita/public/$ARTICLE_NAME.md" ]]; then
+            echo '::error::qiita/public/ にある記事ファイル名を拡張子なしで指定してください。'
+            exit 1
+          fi
+      - name: Node.jsをセットアップ
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - run: npm ci
+      - name: 指定記事をQiita CLIで投稿・更新
+        env:
+          QIITA_TOKEN: ${{ secrets.QIITA_TOKEN }}
+        shell: bash
+        run: |
+          if [[ -z "$QIITA_TOKEN" ]]; then
+            echo '::error::リポジトリのActionsシークレットにQIITA_TOKENを登録してください。'
+            exit 1
+          fi
+          npm run qiita -- publish "$ARTICLE_NAME"
+      - name: 記事IDと更新日時を保存
+        shell: bash
+        run: |
+          git add -- "qiita/public/$ARTICLE_NAME.md"
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'chore(qiita): 投稿情報を同期'
+          git push origin HEAD:main
