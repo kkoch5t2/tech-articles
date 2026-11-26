@@ -7,6 +7,10 @@ on:
         description: 'qiita/public/ にある記事ファイル名（.md を除く）'
         required: true
         type: string
+      verify_only:
+        description: 'Qiitaの認証とCLIの起動を確認する'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -38,7 +42,24 @@ jobs:
         with:
           node-version: '24'
       - run: npm ci
+      - name: Qiita認証とCLIの起動を確認
+        if: inputs.verify_only
+        env:
+          QIITA_TOKEN: ${{ secrets.QIITA_TOKEN }}
+        run: |
+          node --input-type=module <<'NODE'
+          const token = process.env.QIITA_TOKEN;
+          if (!token) throw new Error("QIITA_TOKENが登録されていません。");
+          const response = await fetch("https://qiita.com/api/v2/authenticated_user", {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: AbortSignal.timeout(15000),
+          });
+          if (!response.ok) throw new Error(`Qiita認証の確認に失敗しました (HTTP ${response.status})。`);
+          console.log("Qiita認証を確認しました。");
+          NODE
+          npm run qiita -- version
       - name: 指定記事をQiita CLIで投稿・更新
+        if: '!inputs.verify_only'
         env:
           QIITA_TOKEN: ${{ secrets.QIITA_TOKEN }}
         shell: bash
@@ -49,6 +70,7 @@ jobs:
           fi
           npm run qiita -- publish "$ARTICLE_NAME"
       - name: 記事IDと更新日時を保存
+        if: '!inputs.verify_only'
         shell: bash
         run: |
           git add -- "qiita/public/$ARTICLE_NAME.md"
