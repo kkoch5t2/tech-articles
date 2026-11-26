@@ -64,6 +64,14 @@ npm run qiita -- publish article-name
 
 投稿後に書き込まれた `id` と `updated_at` を含めて原稿をコミットします。次回は `id` を残した同じ原稿を編集し、同じコマンドで更新します。公開ページを開き、本文と画像の表示を確認します。
 
+### GitHub Actionsから1本ずつ投稿・更新する
+
+1. Qiitaで `read_qiita` と `write_qiita` を選んで発行したアクセストークンを、[Actionsのリポジトリシークレット](https://github.com/kkoch5t2/tech-articles/settings/secrets/actions)に `QIITA_TOKEN` という名前で登録します。
+2. `main` に原稿を反映し、[Qiitaの記事を投稿・更新](https://github.com/kkoch5t2/tech-articles/actions/workflows/publish-qiita.yml)を開きます。
+3. `Run workflow` を選び、ブランチを `main` にします。`article` に `qiita/public/` 内の記事ファイル名を拡張子なしで入力して実行します。
+
+実行履歴で公開先を確認できます。投稿や更新でQiita CLIが書き込んだ `id` と `updated_at` は `main` に反映されます。
+
 ## 公式ドキュメント
 
 - [Zenn CLIで記事・本を管理する方法](https://zenn.dev/zenn/articles/zenn-cli-guide)
