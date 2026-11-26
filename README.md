@@ -1,73 +1,69 @@
-# 技術記事の管理リポジトリ
+# 技術記事の管理
 
-Zennの記事と本、Qiitaの記事をMarkdownで管理します。
+Zennの記事と本、Qiitaの記事をMarkdownで管理するリポジトリです。
 
-## 初期セットアップ
+## 原稿と公開先
 
-新しく環境を構築する場合（別のPCでクローンした時など）は、最初に依存パッケージをインストールしてください。
+| 公開先 | ファイルの場所 | 公開方法 |
+| --- | --- | --- |
+| Zenn | 記事は `articles/`、本は `books/`、画像は `images/` | Zennと連携したGitHubブランチから同期 |
+| Qiita | 記事は `qiita/public/` | Qiita CLIで対象の記事を指定して投稿 |
+
+このGitHubリポジトリは公開されています。ZennやQiitaで下書きにしていても、GitHubへプッシュしたファイルは閲覧できます。公開前に伏せたい原稿や画像は手元に置いてください。
+
+## 初回セットアップ
+
+Node.js 22.22.1以上を用意して、リポジトリをクローンします。以降のコマンドも `package.json` があるリポジトリのルートで実行します。
 
 ```bash
+git clone https://github.com/kkoch5t2/tech-articles.git
+cd tech-articles
 npm ci
 ```
 
-## Zennの使い方
+### Qiitaを使う場合
 
-Zenn CLIを使用して、記事の作成やプレビューを行います。コマンドはすべてこのディレクトリ（`package.json` がある場所）で実行してください。
+Qiitaにログインし、`read_qiita` と `write_qiita` を選んでアクセストークンを発行します。[Qiitaのアクセストークン発行画面](https://qiita.com/settings/tokens/new)
 
-### ローカルプレビューの起動
-
-```bash
-npx zenn preview
-```
-実行後、ブラウザで `http://localhost:8000` にアクセスすると、執筆中の記事や本をリアルタイムでプレビューできます。
-
-### 新規記事の作成
-
-```bash
-npx zenn new:article
-```
-`articles` ディレクトリに新しいMarkdownファイルが生成されます。
-
-### 新規本の作成
-
-```bash
-npx zenn new:book
-```
-`books` ディレクトリに新しい本のディレクトリが生成されます。
-
-## Qiitaの使い方
-
-Qiitaの原稿は `qiita/public/` に置きます。Qiita CLI 1.13.0 には Node.js 22.22.1 以上が必要です。
-
-### 初回のみ認証する
-
-Qiitaの[アクセストークン発行画面](https://qiita.com/settings/tokens/new)で `read_qiita` と `write_qiita` を選んで発行し、以下のコマンドの入力欄に貼り付けます。トークンはCLIの認証設定に保存してください。
+次のコマンドを実行し、トークンをCLIの入力欄に貼り付けます。トークンはGitにコミットしないでください。
 
 ```bash
 npm run qiita -- login
 ```
 
-既存の公開記事を取り込む場合は `npm run qiita -- pull` を実行します。
+## Zennの記事を書く・公開する
 
-### 記事を書く
+1. `npx zenn new:article` で原稿を作ります。`articles/` にMarkdownファイルが生成されます。下書きの間はファイル先頭の `published` を `false` にします。
+2. `npx zenn preview` を実行し、`http://localhost:8000` で本文、画像、リンクを確認します。
+3. 公開するときは `published: true` にして、Zennの連携対象ブランチに反映します。反映結果は[Zennのデプロイ履歴](https://zenn.dev/dashboard/deploys)で確認できます。
+
+公開済みの記事を直すときは、同じファイル名（`slug`）の原稿を編集して反映します。本を作るときは `npx zenn new:book` を実行します。
+
+## Qiitaの記事を書く・公開する
+
+### 原稿を作ってプレビューする
 
 ```bash
 npm run qiita -- new article-name
 npm run qiita -- preview
 ```
 
-`qiita/public/article-name.md` が生成されます。執筆中は先頭の `ignorePublish` を `true` にします。このGitHubリポジトリは公開されているため、公開前に伏せておきたい原稿や画像は手元で管理してください。
+`article-name` は付けたいファイル名に置き換えます。原稿は `qiita/public/article-name.md` に作られます。原稿を作ったら、執筆中はファイル先頭の `ignorePublish` を `true` にします。プレビューは `http://localhost:8888` で確認できます。
 
-### 記事を公開・更新する
+既存の公開記事を取り込むときは `npm run qiita -- pull` を実行します。`preview` の起動時にもQiitaの記事が同期されるので、取り込まれたファイルはコミット前に差分を確認してください。
 
-対象の原稿にタイトルとタグを入れ、`ignorePublish: false` にしてから、ファイル名を指定して投稿します。
+### 1本ずつ投稿・更新する
+
+タイトルとタグを設定し、`ignorePublish: false`、`private: false` にして、対象のファイル名を拡張子なしで指定します。
 
 ```bash
 npm run qiita -- publish article-name
 ```
 
-初回投稿でファイルに書き込まれる `id` と `updated_at` をコミットしてください。以後は同じ `id` のファイルを編集して投稿すると、既存記事が更新されます。URLを開いて本文と画像の表示を確認してください。
+投稿後に書き込まれた `id` と `updated_at` を含めて原稿をコミットします。次回は `id` を残した同じ原稿を編集し、同じコマンドで更新します。公開ページを開き、本文と画像の表示を確認します。
 
-## 参考リンク
-* [📘 Zenn CLI ガイド (公式)](https://zenn.dev/zenn/articles/zenn-cli-guide)
-* [Qiita CLI 公式ドキュメント](https://github.com/increments/qiita-cli)
+## 公式ドキュメント
+
+- [Zenn CLIで記事・本を管理する方法](https://zenn.dev/zenn/articles/zenn-cli-guide)
+- [ZennとGitHubリポジトリを連携する方法](https://zenn.dev/zenn/articles/connect-to-github)
+- [Qiita CLIの使い方](https://github.com/increments/qiita-cli)
