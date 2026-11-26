@@ -1,15 +1,19 @@
 {
-  "name": "zenn-contents",
+  "name": "tech-articles",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "qiita": "qiita --root ./qiita --config ./qiita"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "zenn-cli": "^0.5.2"
+  },
+  "devDependencies": {
+    "@qiita/qiita-cli": "1.13.0"
   }
 }
