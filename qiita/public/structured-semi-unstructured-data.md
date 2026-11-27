@@ -57,7 +57,7 @@ agreed_posting_campaign_term: false
 
 「注文001でキーボードを購入し、午前中の配送を希望する」という場面を考えます。
 
-![表・JSON・文章・画像・音声で見る3種類のデータの違い](https://raw.githubusercontent.com/kkoch5t2/tech-articles/be19c45956d934e630a6b871dca56f11e1781b50/zenn/images/structured-semi-unstructured-data/01-overview-v2.png)
+![表・JSON・文章・画像・音声で見る3種類のデータの違い](https://raw.githubusercontent.com/kkoch5t2/qiita-contents/cf5cdb21fa73c830fa233941758127f7e67c4d71/images/structured-semi-unstructured-data/01-overview-v2.png)
 *同じ注文に関する情報でも、項目への整理の仕方が異なる。各例は特徴が分かる部分を抜粋。*
 
 - **構造化データ**では、「注文ID」「商品名」「金額」「希望時間」などの列を用意し、共通のルールで記録します。
@@ -74,7 +74,7 @@ agreed_posting_campaign_term: false
 
 注文テーブルなら、1行が1件の注文を表し、各列には同じ種類の情報が入ります。
 
-![共通の列に沿って記録した注文一覧と金額の合計](https://raw.githubusercontent.com/kkoch5t2/tech-articles/be19c45956d934e630a6b871dca56f11e1781b50/zenn/images/structured-semi-unstructured-data/02-structured.png)
+![共通の列に沿って記録した注文一覧と金額の合計](https://raw.githubusercontent.com/kkoch5t2/qiita-contents/cf5cdb21fa73c830fa233941758127f7e67c4d71/images/structured-semi-unstructured-data/02-structured.png)
 *「金額」の列が決まっているため、どの値を合計するかが明確になる。*
 
 この例では、「金額は円単位の数値」というルールがあるため、8,000円と3,000円を足して、11,000円と集計できます。
@@ -125,7 +125,7 @@ CSV自体には、金額が数値であることや、注文IDが一意である
 
 例えばJSONでは、`"注文ID": "001"`のように、情報の名前を示す**キー**と、その**値**を組み合わせます。値の中に、さらにキーと値の組み合わせを持たせる「入れ子」も使えます。
 
-![配送情報が入れ子になり、注文によって項目が異なるJSONの例](https://raw.githubusercontent.com/kkoch5t2/tech-articles/be19c45956d934e630a6b871dca56f11e1781b50/zenn/images/structured-semi-unstructured-data/03-semi-structured-v2.png)
+![配送情報が入れ子になり、注文によって項目が異なるJSONの例](https://raw.githubusercontent.com/kkoch5t2/qiita-contents/cf5cdb21fa73c830fa233941758127f7e67c4d71/images/structured-semi-unstructured-data/03-semi-structured-v2.png)
 *注文001には配送の項目があり、注文002にはない。各データの構造はキーから読み取れる。*
 
 ```json:orders.json
@@ -195,7 +195,7 @@ JSONには構文のルールがあり、さらにJSON Schemaなどで必須項�
 
 人が読めば意味は分かります。しかし、そのままでは「注文ID」「問い合わせ種別」「希望時間」という列には分かれていません。これらを集計したい場合には、文章から情報を抽出します。
 
-![問い合わせの文章から注文IDと配送希望を取り出して表にする流れ](https://raw.githubusercontent.com/kkoch5t2/tech-articles/be19c45956d934e630a6b871dca56f11e1781b50/zenn/images/structured-semi-unstructured-data/04-unstructured.png)
+![問い合わせの文章から注文IDと配送希望を取り出して表にする流れ](https://raw.githubusercontent.com/kkoch5t2/qiita-contents/cf5cdb21fa73c830fa233941758127f7e67c4d71/images/structured-semi-unstructured-data/04-unstructured.png)
 *文章から必要な項目を取り出すと、その結果を構造化データとして扱える。*
 
 抽出の方法には、ルールによる文字列処理、自然言語処理、生成AIなどがあります。画像であればOCR（光学文字認識）、音声であれば文字起こしなどを組み合わせる場合もあります。どこまでの処理が必要かは、知りたい情報によって変わります。
@@ -245,7 +245,7 @@ PNG画像には画像形式としての決まりがあり、文章には段落�
 | CSV | IDと、長い自由記述の問い合わせ本文 | レコードの外枠は構造化されているが、本文の内容は非構造化 |
 | PDF | 契約書の文章、商品の写真、スキャンした帳票 | 一般に非構造化データとして扱い、目的に応じて内容を抽出する |
 
-![Excelの一覧表と、文章や写真を配置した報告書の比較](https://raw.githubusercontent.com/kkoch5t2/tech-articles/be19c45956d934e630a6b871dca56f11e1781b50/zenn/images/structured-semi-unstructured-data/05-excel.png)
+![Excelの一覧表と、文章や写真を配置した報告書の比較](https://raw.githubusercontent.com/kkoch5t2/qiita-contents/cf5cdb21fa73c830fa233941758127f7e67c4d71/images/structured-semi-unstructured-data/05-excel.png)
 *どちらもセルの行・列はあるが、業務情報が共通の項目に整理されているかが違う。図は説明用の模式図。*
 
 Excelでは、セルが行・列に並んでいることと、業務データが構造化されていることを分けて考えます。セル結合や色分けがあるという理由だけで、直ちに非構造化と決まるわけでもありません。**各項目と1件のデータの範囲を、一貫したルールで読み取れるか**が大切です。
@@ -258,7 +258,7 @@ Excelでは、セルが行・列に並んでいることと、業務データが
 
 データの種類によって、分析までに必要となる処理が変わります。
 
-![構造化・半構造化・非構造化データから必要な情報を取り出して集計する流れ](https://raw.githubusercontent.com/kkoch5t2/tech-articles/be19c45956d934e630a6b871dca56f11e1781b50/zenn/images/structured-semi-unstructured-data/06-analysis-v2.png)
+![構造化・半構造化・非構造化データから必要な情報を取り出して集計する流れ](https://raw.githubusercontent.com/kkoch5t2/qiita-contents/cf5cdb21fa73c830fa233941758127f7e67c4d71/images/structured-semi-unstructured-data/06-analysis-v2.png)
 *同じ集計を目指していても、列の選択・JSONの項目取り出し・文章からの抽出では処理が異なる。*
 
 例えば、注文ごとの配送希望を調べる場合は、次のようになります。
@@ -298,4 +298,3 @@ https://zenn.dev/kkoch5t2/articles/41ad155b966681
 [^semi]: Snowflake公式ドキュメント「[Introduction to loading semi-structured data](https://docs.snowflake.com/en/user-guide/semistructured-intro)」。階層構造や半構造化データの取り扱いについて参照。
 [^unstructured]: Snowflake公式ドキュメント「[Unstructured data types](https://docs.snowflake.com/en/sql-reference/data-types-unstructured)」。3種類の分類と、ファイル形式の内部構造との区別について参照。
 [^lake]: AWS「[What is a Data Lake?](https://aws.amazon.com/what-is/data-lake/)」。データレイクとDWHの役割について参照。
-
