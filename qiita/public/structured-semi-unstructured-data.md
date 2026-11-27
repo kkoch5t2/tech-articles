@@ -7,7 +7,7 @@ tags:
   - JSON
   - Excel
 private: false
-updated_at: '2026-11-26T23:52:36+09:00'
+updated_at: '2026-11-28T05:51:52+09:00'
 id: 24d4dcd6a3bfc4bf7313
 organization_url_name: null
 slide: false
